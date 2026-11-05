@@ -1,0 +1,35 @@
+<?xml version="1.0"?>
+<!-- -*- mode: XML -*- -->
+<launch>
+	<arg name="hand_ip" default="192.168.1.40"/>			   
+    <arg name="handEnable" default="true"/>	 
+
+    <arg name="Hand_Freedom" default="16"/> <!-- -*-6/9/10/16 自由度选择; 100 最小系统遥操作控制；106/109/110/116  最小系统机械手自由度选择;-*- -->	
+    <arg name="JointVelocity" default="250"/> <!-- -*-速度 0-255-*- -->	
+    <arg name="JointEffort" default="100"/> <!-- -*-力度 0-255-*- -->	
+    <arg name="pose_X" default="-0.94"/>
+    <arg name="pose_Y" default="-17.782"/>
+    <arg name="pose_Z" default="88.632"/>
+    <arg name="pose_RX" default="7.595"/>
+    <arg name="pose_RY" default="25.827"/>
+    <arg name="pose_RZ" default="353.766"/>
+
+
+	<node pkg="HandTCPCommunication" type="HandCtrl_node" name="arm" required="true" output="screen" respawn="false">
+		
+        <param name="hand_ip" value="$(arg hand_ip)" />  
+        <param name="handEnable" value="$(arg handEnable)" /> 
+
+        <param name="Hand_Freedom" value="$(arg Hand_Freedom)" />
+        <param name="JointVelocity" value="$(arg JointVelocity)" />
+        <param name="JointEffort" value="$(arg JointEffort)" />
+        <param name="pose_X" value="$(arg pose_X)"/>
+        <param name="pose_Y" value="$(arg pose_Y)"/>
+        <param name="pose_Z" value="$(arg pose_Z)"/>
+        <param name="pose_RX" value="$(arg pose_RX)"/>
+        <param name="pose_RY" value="$(arg pose_RY)"/>
+        <param name="pose_RZ" value="$(arg pose_RZ)"/>
+        
+	</node>
+	
+</launch>

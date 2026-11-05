@@ -1,0 +1,3 @@
+<launch>
+  <test test-name="grasp_regression" pkg="HandTCPCommunication" type="grasp_regression" time-limit="60"/>
+</launch>

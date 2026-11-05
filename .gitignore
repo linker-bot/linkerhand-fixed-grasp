@@ -1,0 +1,7 @@
+/work/
+/fixedgrasp/build/
+/fixedgrasp/devel/
+/fixedgrasp/install/
+/fixedgrasp/src/CMakeLists.txt
+__pycache__/
+*.py[cod]

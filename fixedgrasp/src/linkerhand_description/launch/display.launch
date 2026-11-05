@@ -1,0 +1,8 @@
+<launch>
+  <arg name="side" default="left"/>
+  <arg name="rviz" default="true"/>
+  <param name="robot_description" command="$(find linkerhand_description)/scripts/load_urdf.py --package-path $(find linkerhand_description) --side $(arg side)"/>
+  <node pkg="joint_state_publisher" type="joint_state_publisher" name="joint_state_publisher"/>
+  <node pkg="robot_state_publisher" type="robot_state_publisher" name="robot_state_publisher"/>
+  <node if="$(arg rviz)" pkg="rviz" type="rviz" name="rviz"/>
+</launch>

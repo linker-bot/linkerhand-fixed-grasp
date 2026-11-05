@@ -1,0 +1,3 @@
+[submodule "linkerhand-urdf"]
+	path = vendor/linkerhand-urdf
+	url = https://github.com/linker-bot/linkerhand-urdf.git
