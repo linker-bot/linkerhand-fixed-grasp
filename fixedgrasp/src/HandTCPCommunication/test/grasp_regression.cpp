@@ -10,6 +10,7 @@ struct GraspTestAccess {
     static void configure(TCPCommunication_Hand &h) {
         h.m_hand_isConnected = true;
         h.hand_feedback_valid = true;
+        h.configuration_valid = true;
         h.target_poses.resize(5);
         h.tools_farmeName.resize(8, "tool");
         h.connectVisual(ros::NodeHandle());

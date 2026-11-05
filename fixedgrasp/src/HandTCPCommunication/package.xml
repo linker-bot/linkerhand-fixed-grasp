@@ -10,6 +10,7 @@
   <exec_depend>message_runtime</exec_depend>
   <depend>roscpp</depend>
   <depend>roslib</depend>
+  <depend>xmlrpcpp</depend>
   <depend>std_msgs</depend>
   <depend>sensor_msgs</depend>
   <depend>geometry_msgs</depend>
@@ -21,4 +22,7 @@
   <depend>eigen</depend>
   <depend>libjsoncpp-dev</depend>
   <test_depend>rostest</test_depend>
+  <test_depend>python3-nose</test_depend>
+  <test_depend>python3-rospkg</test_depend>
+  <test_depend>python3-yaml</test_depend>
 </package>

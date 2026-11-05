@@ -39,17 +39,39 @@ This launch provides model visualization. The hardware controller's `JointState`
 
 ## Configure and run the controller
 
-`target_pose.json` contains five six-axis joint targets: initial position, tray B approach, tray B placement, tray A approach, and tray A placement. These are joint angles, stored in the existing `position.{x,y,z}` and `orientation.{x,y,z}` fields; they are not Cartesian poses or quaternions.
+`target_pose.json` must contain exactly five six-axis joint targets: initial position, tray B approach, tray B placement, tray A approach, and tray A placement. These are joint angles, stored in the existing `position.{x,y,z}` and `orientation.{x,y,z}` fields; they are not Cartesian poses or quaternions. All six components are required numeric values. The unused legacy `orientation.w` is optional, but must be numeric if supplied.
 
-`tools_Tcp.json` retains the original tool-offset data. The controller switches to tool frames already configured on the arm; it does not create or calibrate those frames from this file. Preset IDs are 1 silk, 2 eggs, 3 battery, 4 pills, 5 ball, 6 screwdriver, 7 bottle, and 8 bolt.
+`tools_Tcp.json` retains the original tool-offset data. The controller switches to tool frames already configured on the arm; it does not create or calibrate those frames from this file. Each tool entry must contain six numeric `Tcp` components. The eight required tool keys are `Silk`, `Eggs`, `Battery`, `pills`, `Ball`, `Screwdriver`, `bottle`, and `Bolt`; they are loaded in preset-ID order rather than JSON key order. Preset IDs are 1 silk, 2 eggs, 3 battery, 4 pills, 5 ball, 6 screwdriver, 7 bottle, and 8 bolt.
 
-Configure `~fixed_grasp_targets` as an array of objects with `label`, `id` (1–8), and `pose` (six finite values: x, y, z in metres and rx, ry, rz in radians). The pose must be calibrated in the arm's active work frame for the selected tool frame. A detected label selects that fixed pose, regardless of the box's pixel position. No grasp targets are provided by default.
+Configure `~fixed_grasp_targets` as an array of objects with `label`, `id` (1–8), and `pose` (six finite values: x, y, z in metres and rx, ry, rz in radians). The pose must be calibrated in the arm's active work frame for the selected tool frame. A detected label selects that fixed pose, regardless of the box's pixel position. Labels and preset IDs must each be unique within the configuration. No grasp targets are provided by default.
 
 ```sh
 roslaunch HandTCPCommunication HandCtrl_node.launch
 ```
 
-The existing launch defaults use hand IP `192.168.1.40`, protocol port 20008, and freedom mode 16. The arm endpoint remains `192.168.1.18:8080` in `InitArm()`. Starting this node connects to hardware and begins the initial movement. Load the calibrated target parameters under `/arm` before starting it, or add a `rosparam` file inside the launch node.
+The existing launch defaults use hand IP `192.168.1.40`, protocol port 20008, and freedom mode 16. The default arm endpoint is `192.168.1.18:8080`, supplied through ROS parameters. Starting this node connects to hardware and begins the initial movement. Load the calibrated target parameters under `/arm` before starting it, or add a `rosparam` file inside the launch node.
+
+The arm and motion configuration parameters are private to the controller node (normally `/arm`):
+
+- `arm_ip`: numeric IPv4 address; default `192.168.1.18`.
+- `arm_port`: integer 1–65535; default 8080.
+- `arm_timeout_ms`: SDK socket timeout, integer 1–60000; default 5000.
+- `arm_speed_percent`: joint and Cartesian movement speed, integer 1–100; default 20.
+- `target_pose_file` and `tools_tcp_file`: absolute JSON paths. Defaults resolve to the package files in both devel and install spaces.
+- `joint_limits_deg`: optional six `[min, max]` pairs for joints 1–6, in degrees.
+- `workspace_bounds_m`: optional three `[min, max]` pairs for fixed grasp x, y, z, in metres.
+
+Bounds are inclusive and must contain finite numeric values in ascending order. No physical joint limits or workspace bounds are assumed when those parameters are absent. Configure them for the actual robot, work frame, and tool frames. Structural and numeric checks do not establish collision clearance or reachability. This controller retains the six-axis RM65 SDK mode; changing the endpoint does not select another arm model.
+
+For example, override the endpoint and speed without changing source files:
+
+```sh
+roslaunch HandTCPCommunication HandCtrl_node.launch arm_ip:=192.168.1.20 arm_port:=8080 arm_timeout_ms:=3000 arm_speed_percent:=15 target_pose_file:=/absolute/path/target_pose.json tools_tcp_file:=/absolute/path/tools_Tcp.json
+```
+
+Use `motion_config_file:=/absolute/path/deployment.yaml` to load a private ROS parameter YAML file containing the endpoint settings, limits, and calibrated `fixed_grasp_targets`. It is loaded after the launch parameters, so values in that file take precedence over arguments with the same names.
+
+Malformed JSON, duplicate keys, trailing data, missing components, incorrect types, non-finite values, float overflow/underflow, invalid preset IDs, and targets outside configured bounds cause startup to fail before either hardware connection. The parser commits a configuration only after every section passes. A failed reload disables further arm motion commands and clears active targets; it does not leave a partially loaded batch. Joint and Cartesian commands are also checked immediately before SDK calls. The legacy `pose_X`/`pose_RX` launch parameters belong to the unused `show_left()` path; the active sequence uses the JSON joint targets and `fixed_grasp_targets`.
 
 At the initial position, the controller publishes `detect_objects` on `/aimo/robot_control/OrderDetect0bj` and waits for an `OrderDetectResult` on `/aimo/robot_ai/orderDetectobj_result`:
 
@@ -84,7 +106,7 @@ catkin_test_results build/test_results
 catkin_make -j2 install
 ```
 
-The regression suite uses the production state machine and ROS subscriber with a fake arm backend; it does not connect to hardware. It covers initial-state transitions, empty and exhausted queues, batch processing, motion and tool failures, invalid detection data, fixed-pose selection, subscriber lifetime, and target configuration. Additional TCP tests cover fragmented and coalesced frames, write backpressure, connect/read/write deadlines, interrupted waits, EOF/reset, retry delay, partial-response rejection, and feedback publication after recovery.
+The regression suite uses the production state machine and ROS subscriber with a fake arm backend; it does not connect to hardware. It covers initial-state transitions, empty and exhausted queues, batch processing, motion and tool failures, invalid detection data, fixed-pose selection, subscriber lifetime, and target configuration. Additional TCP tests cover fragmented and coalesced frames, write backpressure, connect/read/write deadlines, interrupted waits, EOF/reset, retry delay, partial-response rejection, and feedback publication after recovery. Configuration tests cover malformed files and parameters, bounds, atomic loads, failure before hardware connections, and endpoint/speed forwarding to a fake SDK backend.
 
 `tools/ros-noetic.Dockerfile` provides an ARM64-compatible build environment using the bundled SDK. See [validation notes](docs/validation.md) for the checks performed and remaining limitations.
 

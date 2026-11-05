@@ -23,7 +23,7 @@ Linux ARM64, Ubuntu 20.04, ROS Noetic, GCC 9, and the bundled ARM64 RealMan SDK.
 ## Results
 
 - ARM64 `catkin_make -j2 -DCMAKE_BUILD_TYPE=RelWithDebInfo`: passed, including message generation and final executable linkage.
-- `catkin_make -j2 run_tests_HandTCPCommunication`: 28 distinct regression cases passed (11 grasp/vision, 11 TCP stream, 6 TCP recovery); no failures.
+- `catkin_make -j2 run_tests_HandTCPCommunication`: 53 distinct regression cases passed (11 grasp/vision, 11 TCP stream, 6 TCP recovery, 21 configuration, 4 launch parameters); no failures.
 - `catkin_make -j2 install`: passed.
 - Installed left and right URDF: each contains 21 links, 20 joints, and 42 mesh references; every referenced asset exists.
 - Installed controller: all dynamic libraries resolve.
@@ -42,3 +42,13 @@ The wall timer and wall-rate main loop continue to service connections independe
 Regression tests use real loopback sockets and the production transport. A small send buffer and a delayed reader exercise short writes and backpressure. Fragmented, coalesced, truncated, delayed, and reset responses exercise receive handling. A full accept queue tests connection timeout without an external network dependency. ROS integration tests verify retry pacing, feedback invalidation, fresh data after reconnect, preservation of the last complete snapshot, and suppression of stale state publication.
 
 TCP validation completed on the same ARM64 ROS Noetic environment: controller build/link, all 28 distinct regression cases, and installation passed. The installed executable has no unresolved dynamic-library dependencies. Recovery also passed with `/use_sim_time=true` and no clock messages. The tests use local sockets and a fake arm backend; physical device behavior was not exercised.
+
+## Arm endpoint and pose-configuration follow-up
+
+The arm IP, port, SDK socket timeout, speed percentage, and joint/tool JSON paths are private ROS parameters and launch arguments. An optional deployment YAML file loads limits and calibrated grasp targets into the node namespace. The RM65 model and six-axis control layout are unchanged.
+
+The configuration parser validates parameter types and ranges, file schemas, all six joint components, all six tool-offset components, required tool keys, and fixed-target labels and IDs. JSON rejects duplicate keys and trailing data. Numeric values must be finite and fit the SDK float range; nonzero values that would underflow to zero are rejected. Optional joint limits and Cartesian workspace bounds are checked during loading and before motion commands. Joint targets retain their legacy six-angle layout; Cartesian SDK poses now receive a quaternion consistent with their Euler angles.
+
+Configuration is parsed into a candidate and committed only on success. Invalid configuration stops startup before hand or arm connection. A failed reload disables further arm motion commands and clears active targets. SDK calls are isolated behind overridable methods so tests verify endpoint/timeout/speed forwarding and confirm that invalid input produces no initialization, connection, or movement calls.
+
+Validation passed on Linux ARM64, Ubuntu 20.04, ROS Noetic, and GCC 9: controller build/link, all 53 distinct test cases, and installation. The installed executable has no unresolved dynamic-library dependencies. Devel and install launch checks confirmed default JSON paths, endpoint/speed overrides, and deployment-YAML precedence; the automated launch suite also verifies namespaced loading. No physical arm or hand was used.

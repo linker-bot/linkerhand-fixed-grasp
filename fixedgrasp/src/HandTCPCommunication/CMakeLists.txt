@@ -4,7 +4,7 @@ project(HandTCPCommunication)
 set(CMAKE_CXX_STANDARD 11)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 find_package(catkin REQUIRED COMPONENTS
-  roscpp roslib std_msgs sensor_msgs geometry_msgs
+  roscpp roslib xmlrpcpp std_msgs sensor_msgs geometry_msgs
   tf tf2 tf2_ros tf2_geometry_msgs serial message_generation)
 find_package(Eigen3 REQUIRED)
 find_package(PkgConfig REQUIRED)
@@ -15,7 +15,7 @@ generate_messages(DEPENDENCIES std_msgs)
 catkin_package(
   INCLUDE_DIRS include
   LIBRARIES TCPCommunication_Hand
-  CATKIN_DEPENDS roscpp roslib std_msgs sensor_msgs geometry_msgs
+  CATKIN_DEPENDS roscpp roslib xmlrpcpp std_msgs sensor_msgs geometry_msgs
     tf tf2 tf2_ros tf2_geometry_msgs serial message_runtime)
 include_directories(include handeyesolver/include ${catkin_INCLUDE_DIRS}
   ${JSONCPP_INCLUDE_DIRS})
@@ -37,7 +37,7 @@ set_target_properties(RM_Service PROPERTIES IMPORTED_LOCATION "${RM_SERVICE_LIBR
 
 add_subdirectory(handeyesolver)
 add_library(TCPCommunication_Hand
-  src/TCPCommunication_Hand.cpp src/TcpStream.cpp src/CoordinateTransform.cpp src/HandEyeCalibration.cpp)
+  src/TCPCommunication_Hand.cpp src/ControllerConfiguration.cpp src/TcpStream.cpp src/CoordinateTransform.cpp src/HandEyeCalibration.cpp)
 add_dependencies(TCPCommunication_Hand ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 target_link_libraries(TCPCommunication_Hand PUBLIC handeyesolver Eigen3::Eigen
   ${catkin_LIBRARIES} ${JSONCPP_LIBRARIES} RM_Service)
@@ -59,9 +59,14 @@ install(FILES "${RM_SERVICE_LIBRARY}" DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATI
 
 if(CATKIN_ENABLE_TESTING)
   find_package(rostest REQUIRED)
+  catkin_add_nosetests(test/launch_parameters_regression.py)
   add_rostest_gtest(grasp_regression test/grasp_regression.test test/grasp_regression.cpp)
   if(TARGET grasp_regression)
     target_link_libraries(grasp_regression TCPCommunication_Hand)
+  endif()
+  add_rostest_gtest(configuration_regression test/configuration_regression.test test/configuration_regression.cpp)
+  if(TARGET configuration_regression)
+    target_link_libraries(configuration_regression TCPCommunication_Hand)
   endif()
   find_package(Threads REQUIRED)
   catkin_add_gtest(tcp_stream_regression test/tcp_stream_regression.cpp src/TcpStream.cpp)

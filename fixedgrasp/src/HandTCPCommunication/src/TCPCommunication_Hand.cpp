@@ -30,7 +30,7 @@ namespace AIMOcommunicate
     }
     void TCPCommunication_Hand::grep_run()
     {
-        if (!m_hand_isConnected || !hand_feedback_valid) return;
+        if (!configuration_valid || !m_hand_isConnected || !hand_feedback_valid) return;
         if (target_poses.size() < 5)
         {
             ROS_ERROR_THROTTLE(5, "Five configured arm poses are required");
@@ -3379,115 +3379,29 @@ namespace AIMOcommunicate
 
     bool TCPCommunication_Hand::initTargetPoses()
     {
-        target_poses.clear();
-        Tools_Tcp.clear();
-        tools_farmeName.clear();
-        fixed_grasp_targets.clear();
-        std::string jsonFilePath = ros::package::getPath("HandTCPCommunication");
-        jsonFilePath = jsonFilePath + "/target_pose.json";
-        std::ifstream json_file(jsonFilePath);
-        if (!json_file.is_open())
+        ControllerConfiguration candidate;
+        std::string error;
+        if (!loadControllerConfiguration(ros::NodeHandle("~"), ros::package::getPath("HandTCPCommunication"),
+                                         candidate, error))
         {
-            ROS_WARN(" can't open json config file. please check file path.");
+            ROS_ERROR("%s", error.c_str());
+            configuration_valid = false;
+            target_poses.clear();
+            Tools_Tcp.clear();
+            tools_farmeName.clear();
+            fixed_grasp_targets.clear();
+            obj_list.clear();
+            if_complite = false;
+            show_step = 9;
             return false;
         }
-        if (!reader.parse(json_file, value))
-        {
-            ROS_WARN("config file parse failed.");
-            return false;
-        }
-        for (const auto &pose_data : value["target_poses"])
-        {
-            geometry_msgs::Pose pose;
-            if (pose_data.isMember("position"))
-            {
-                pose.position.x = pose_data["position"]["x"].asDouble();
-                pose.position.y = pose_data["position"]["y"].asDouble();
-                pose.position.z = pose_data["position"]["z"].asDouble();
-            }
-            if (pose_data.isMember("orientation"))
-            {
-                pose.orientation.x = pose_data["orientation"]["x"].asDouble();
-                pose.orientation.y = pose_data["orientation"]["y"].asDouble();
-                pose.orientation.z = pose_data["orientation"]["z"].asDouble();
-                pose.orientation.w = pose_data["orientation"]["w"].asDouble();
-            }
-            if (!pose_data.isMember("position") || !pose_data.isMember("orientation") ||
-                !std::isfinite(pose.position.x) || !std::isfinite(pose.position.y) ||
-                !std::isfinite(pose.position.z) || !std::isfinite(pose.orientation.x) ||
-                !std::isfinite(pose.orientation.y) || !std::isfinite(pose.orientation.z)) return false;
-            target_poses.push_back(pose);
-        }
-        json_file.close();
-        jsonFilePath = ros::package::getPath("HandTCPCommunication");
-        jsonFilePath = jsonFilePath + "/tools_Tcp.json";
-        std::ifstream json_file_Tcp(jsonFilePath);
-        if (!json_file_Tcp.is_open())
-        {
-            ROS_WARN(" can't open json config file. please check file path....");
-            return false;
-        }
-        if (!reader.parse(json_file_Tcp, value))
-        {
-            ROS_WARN("config file parse failed......");
-            return false;
-        }
-        const Json::Value &crawl_tool = value["Crawl_tool"];
-        for (const auto &tool_name : crawl_tool.getMemberNames())
-        {
-            const Json::Value &tool = crawl_tool[tool_name];
-
-            // 获取 Tcp 数组
-            const Json::Value &tcp = tool["Tcp"];
-            {
-                OXYZ_Pose tcp_offset;
-                tcp_offset.x = tcp[0].asDouble();
-                tcp_offset.y = tcp[1].asDouble();
-                tcp_offset.z = tcp[2].asDouble();
-                tcp_offset.rx = tcp_offset.ry = tcp_offset.rz = 0;
-                std::cout << "x:" << tcp_offset.x << "y: " << tcp_offset.y << "z: " << tcp_offset.z << std::endl;
-                Tools_Tcp.push_back(tcp_offset);
-            }
-        }
-        tools_farmeName.push_back("silk");
-        tools_farmeName.push_back("Eggs");
-        tools_farmeName.push_back("Battery");
-        tools_farmeName.push_back("pills");
-        tools_farmeName.push_back("Ball");
-        tools_farmeName.push_back("Screwdriver");
-        tools_farmeName.push_back("bottle");
-        tools_farmeName.push_back("Bolt");
-        XmlRpc::XmlRpcValue targets;
-        ros::NodeHandle private_node("~");
-        if (private_node.getParam("fixed_grasp_targets", targets))
-        {
-            if (targets.getType() != XmlRpc::XmlRpcValue::TypeArray) return false;
-            for (int i = 0; i < targets.size(); ++i)
-            {
-                auto &entry = targets[i];
-                if (entry.getType() != XmlRpc::XmlRpcValue::TypeStruct ||
-                    !entry.hasMember("label") || !entry.hasMember("id") || !entry.hasMember("pose") ||
-                    entry["label"].getType() != XmlRpc::XmlRpcValue::TypeString ||
-                    entry["id"].getType() != XmlRpc::XmlRpcValue::TypeInt ||
-                    entry["pose"].getType() != XmlRpc::XmlRpcValue::TypeArray || entry["pose"].size() != 6)
-                    return false;
-                Grap_Obj target{};
-                target.ID = static_cast<int>(entry["id"]);
-                std::string label = static_cast<std::string>(entry["label"]);
-                if (target.ID < 1 || target.ID > 8 || label.empty() || fixed_grasp_targets.count(label)) return false;
-                float *values[] = {&target.x, &target.y, &target.z, &target.rx, &target.ry, &target.rz};
-                for (int j = 0; j < 6; ++j)
-                {
-                    auto &v = entry["pose"][j];
-                    if (v.getType() == XmlRpc::XmlRpcValue::TypeInt) *values[j] = static_cast<int>(v);
-                    else if (v.getType() == XmlRpc::XmlRpcValue::TypeDouble) *values[j] = static_cast<double>(v);
-                    else return false;
-                    if (!std::isfinite(*values[j])) return false;
-                }
-                fixed_grasp_targets.emplace(label, target);
-            }
-        }
-        return target_poses.size() >= 5 && Tools_Tcp.size() >= 8;
+        target_poses = candidate.joint_poses;
+        Tools_Tcp = candidate.tool_offsets;
+        tools_farmeName = candidate.tool_frames;
+        fixed_grasp_targets = candidate.fixed_targets;
+        arm_configuration = std::move(candidate);
+        configuration_valid = true;
+        return true;
     }
     //////////////////////天慧视觉topic解析
     void TCPCommunication_Hand::GetVisualData_subCallback(const sensor_msgs::PointCloud2ConstPtr &GridData)
@@ -4188,41 +4102,51 @@ namespace AIMOcommunicate
         // << std::endl;
     }
 
-    // 机械臂初始化
+    int TCPCommunication_Hand::initializeArmApi()
+    {
+        if (!m_pApi) m_pApi = new RM_Service();
+        // This controller uses six joint values and retains the RM65 model.
+        return m_pApi->Service_RM_API_Init(65, MCallback);
+    }
+    SOCKHANDLE TCPCommunication_Hand::connectArmSocket(const std::string &ip, int port, int timeout_ms)
+    {
+        return Arm_Socket_Start(ip.c_str(), port, timeout_ms);
+    }
+    int TCPCommunication_Hand::armSocketState(SOCKHANDLE socket)
+    {
+        return m_pApi && socket > 0 ? m_pApi->Service_Arm_Socket_State(socket) : -1;
+    }
+    int TCPCommunication_Hand::moveArmJoints(const float *joints, int speed_percent)
+    {
+        return m_pApi->Service_Movej_Cmd(m_sockhand, joints, speed_percent, 0, 1);
+    }
+    int TCPCommunication_Hand::moveArmPose(const Pose &pose, int speed_percent)
+    {
+        return m_pApi->Service_Movej_P_Cmd(m_sockhand, pose, speed_percent, 0, 1);
+    }
     bool TCPCommunication_Hand::InitArm()
     {
-        uint16_t Arm_Err;
-        uint16_t Sys_Err;
-        int ret = -1;
-
-        // 机械臂初始化
-        m_pApi = new RM_Service();
-
-        //  初始化API, 注册回调函数
-        ret = m_pApi->Service_RM_API_Init(65, MCallback);
+        if (!initTargetPoses()) return false;
+        int ret = initializeArmApi();
         if (ret != 0)
         {
-            std::cout << "机械臂初始化失败: " << ret << std::endl;
+            ROS_ERROR("Arm API initialization failed: %d", ret);
             return false;
         }
-
-        //  连接机械臂服务器
-        m_sockhand = Arm_Socket_Start((char *)"192.168.1.18", 8080, 5000);
-        if (m_sockhand == 0)
+        const auto &arm = arm_configuration.arm;
+        m_sockhand = connectArmSocket(arm.ip, arm.port, arm.timeout_ms);
+        if (m_sockhand <= 0)
         {
-            std::cout << "机械臂连接失败！" << std::endl;
+            ROS_ERROR("Arm connection failed: %s:%d", arm.ip.c_str(), arm.port);
             return false;
         }
-
-        ret = m_pApi->Service_Arm_Socket_State(m_sockhand);
+        ret = armSocketState(m_sockhand);
         if (ret != 0)
         {
-            std::cout << "初始化时机械臂连接失败: " << ret << std::endl;
+            ROS_ERROR("Arm socket state check failed: %d", ret);
             return false;
         }
-
-        std::cout << "机械臂初始化成功..." << std::endl;
-
+        ROS_INFO("Arm initialized: %s:%d", arm.ip.c_str(), arm.port);
         return true;
     }
     // 机械臂释放资源
@@ -4238,11 +4162,15 @@ namespace AIMOcommunicate
     // 机械臂控制函数--关节运动
     bool TCPCommunication_Hand::armmove_j(geometry_msgs::Pose move_joint)
     {
-        // 机械臂运动
-        int ret = m_pApi->Service_Arm_Socket_State(m_sockhand);
+        if (!configuration_valid || !validJointTarget(move_joint, arm_configuration))
+        {
+            ROS_ERROR("Invalid arm joint target");
+            return false;
+        }
+        int ret = armSocketState(m_sockhand);
         if (ret == 0)
         {
-            float joint[6] = {0, 0, 0, 0, 0, 0};
+            float joint[7] = {};
             joint[0] = move_joint.position.x;
             joint[1] = move_joint.position.y;
             joint[2] = move_joint.position.z;
@@ -4251,7 +4179,7 @@ namespace AIMOcommunicate
             joint[5] = move_joint.orientation.z;
             std::cout << "j1: " << joint[0] << "j2: " << joint[1] << "j3: " << joint[3] << "j4: " << joint[4] << std::endl;
             sleep(1);
-            int moveret = m_pApi->Service_Movej_Cmd(m_sockhand, joint, 20, 0, 1); // 65
+            int moveret = moveArmJoints(joint, arm_configuration.arm.speed_percent); // 65
             if (moveret != 0)
             {
                 std::cout << "机械臂运动失败: " << moveret << std::endl;
@@ -4272,11 +4200,15 @@ namespace AIMOcommunicate
     // 机械臂控制函数--空间运动
     bool TCPCommunication_Hand::armmovej_p(OXYZ_Pose move_pose)
     {
-        // 机械臂运动
-        int ret = m_pApi->Service_Arm_Socket_State(m_sockhand);
+        if (!configuration_valid || !validCartesianTarget(move_pose, arm_configuration))
+        {
+            ROS_ERROR("Invalid arm Cartesian target");
+            return false;
+        }
+        int ret = armSocketState(m_sockhand);
         if (ret == 0)
         {
-            Pose GraspThPose;
+            Pose GraspThPose{};
             GraspThPose.position.x = move_pose.x;
             GraspThPose.position.y = move_pose.y;
             GraspThPose.position.z = move_pose.z;
@@ -4284,12 +4216,14 @@ namespace AIMOcommunicate
             GraspThPose.euler.ry = move_pose.ry;
             GraspThPose.euler.rz = move_pose.rz;
 
-            GraspThPose.quaternion.x = move_pose.rx;
-            GraspThPose.quaternion.y = move_pose.ry;
-            GraspThPose.quaternion.z = move_pose.rz;
-            GraspThPose.quaternion.w = 0;
+            tf2::Quaternion rotation;
+            rotation.setRPY(move_pose.rx, move_pose.ry, move_pose.rz);
+            GraspThPose.quaternion.x = rotation.x();
+            GraspThPose.quaternion.y = rotation.y();
+            GraspThPose.quaternion.z = rotation.z();
+            GraspThPose.quaternion.w = rotation.w();
 
-            int moveret = m_pApi->Service_Movej_P_Cmd(m_sockhand, GraspThPose, 20, 0, 1);
+            int moveret = moveArmPose(GraspThPose, arm_configuration.arm.speed_percent);
             if (moveret != 0)
             {
                 std::cout << "机械臂运动失败: " << moveret << std::endl;
@@ -4310,8 +4244,9 @@ namespace AIMOcommunicate
     bool TCPCommunication_Hand::Change_Tool_Frame(const int id)
     {
         int ret;
-        if (id < 1 || static_cast<size_t>(id) > tools_farmeName.size()) return false;
-        float joint[6];
+        if (!configuration_valid || !m_pApi || m_sockhand <= 0 ||
+            id < 1 || static_cast<size_t>(id) > tools_farmeName.size()) return false;
+        float joint[7]{};
         Pose po1;
         uint16_t Arm_Err;
         uint16_t Sys_Err;

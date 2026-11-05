@@ -2,6 +2,13 @@
 <!-- -*- mode: XML -*- -->
 <launch>
 	<arg name="hand_ip" default="192.168.1.40"/>			   
+    <arg name="arm_ip" default="192.168.1.18"/>
+    <arg name="arm_port" default="8080"/>
+    <arg name="arm_timeout_ms" default="5000"/>
+    <arg name="arm_speed_percent" default="20"/>
+    <arg name="target_pose_file" default="$(find HandTCPCommunication)/target_pose.json"/>
+    <arg name="tools_tcp_file" default="$(find HandTCPCommunication)/tools_Tcp.json"/>
+    <arg name="motion_config_file" default=""/>
     <arg name="hand_port" default="20008"/>
     <arg name="hand_connect_timeout_ms" default="250"/>
     <arg name="hand_io_timeout_ms" default="100"/>
@@ -22,6 +29,12 @@
 	<node pkg="HandTCPCommunication" type="HandCtrl_node" name="arm" required="true" output="screen" respawn="false">
 		
         <param name="hand_ip" value="$(arg hand_ip)" />  
+        <param name="arm_ip" value="$(arg arm_ip)"/>
+        <param name="arm_port" value="$(arg arm_port)"/>
+        <param name="arm_timeout_ms" value="$(arg arm_timeout_ms)"/>
+        <param name="arm_speed_percent" value="$(arg arm_speed_percent)"/>
+        <param name="target_pose_file" value="$(arg target_pose_file)"/>
+        <param name="tools_tcp_file" value="$(arg tools_tcp_file)"/>
         <param name="hand_port" value="$(arg hand_port)"/>
         <param name="hand_connect_timeout_ms" value="$(arg hand_connect_timeout_ms)"/>
         <param name="hand_io_timeout_ms" value="$(arg hand_io_timeout_ms)"/>
@@ -39,5 +52,6 @@
         <param name="pose_RZ" value="$(arg pose_RZ)"/>
         
 	</node>
+    <rosparam if="$(eval arg('motion_config_file') != '')" ns="arm" command="load" file="$(arg motion_config_file)"/>
 	
 </launch>

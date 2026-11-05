@@ -1,0 +1,3 @@
+<launch>
+  <test test-name="configuration_regression" pkg="HandTCPCommunication" type="configuration_regression" time-limit="90"/>
+</launch>

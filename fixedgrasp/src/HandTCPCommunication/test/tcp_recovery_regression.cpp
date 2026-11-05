@@ -12,6 +12,7 @@ struct TcpTestAccess {
         h.hand_io_timeout_ms = 60;
         h.hand_reconnect_delay_ms = 80;
         h.Hand_Freedom = 16;
+        h.configuration_valid = true;
         h.target_poses.resize(5);
         h.pub_right_hand = ros::NodeHandle().advertise<sensor_msgs::JointState>("/tcp_test_hand_states", 1);
     }

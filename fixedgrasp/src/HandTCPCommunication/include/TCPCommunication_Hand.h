@@ -7,6 +7,7 @@
 
 #include "GeneralFunction.h"
 #include "TcpStream.h"
+#include "ControllerConfiguration.h"
 #include <json/json.h>
 #include "rm_service.h"
 #include <std_msgs/Float32MultiArray.h>
@@ -123,18 +124,6 @@ struct ObjectData
           a(0.0f), b(0.0f), c(0.0f), d(0.0f), count(0) {}
 };
 
-struct Grap_Obj
-{
-    int ID;
-    int count;
-    float x;
-    float y;
-    float z;
-    float rx;
-    float ry;
-    float rz;
-};
-
 namespace AIMOcommunicate
 {
     class TCPCommunication_Hand
@@ -179,6 +168,8 @@ namespace AIMOcommunicate
         int hand_reconnect_delay_ms = 1000;
         TcpStream::Deadline next_hand_connect{};
         bool hand_feedback_valid = false;
+        ControllerConfiguration arm_configuration;
+        bool configuration_valid = false;
         int show_step = 0;
         int show_count = 0;
         int show_count_obj = 0;
@@ -212,6 +203,7 @@ namespace AIMOcommunicate
         void connectVisual(ros::NodeHandle node);
         friend struct GraspTestAccess;
         friend struct TcpTestAccess;
+        friend struct ConfigurationTestAccess;
         ros::Publisher pose_pub;
         ros::Publisher arm_reached_pub;
         ros::Publisher get_Visual_pub;
@@ -255,6 +247,13 @@ namespace AIMOcommunicate
         SOCKHANDLE m_sockhand = -1;
         std::vector<std::string> tools_farmeName;
 
+    protected:
+        virtual int initializeArmApi();
+        virtual SOCKHANDLE connectArmSocket(const std::string &ip, int port, int timeout_ms);
+        virtual int armSocketState(SOCKHANDLE socket);
+        virtual int moveArmJoints(const float *joints, int speed_percent);
+        virtual int moveArmPose(const Pose &pose, int speed_percent);
+    public:
         bool InitArm();
         void Realseaemsocket();
         virtual bool armmove_j(geometry_msgs::Pose);
