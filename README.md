@@ -58,6 +58,23 @@ At the initial position, the controller publishes `detect_objects` on `/aimo/rob
 
 One valid snapshot creates a batch. Unknown labels are ignored; duplicate preset IDs are queued once. Empty snapshots finish the batch when fixed targets are configured. Without configured targets, the controller remains waiting. Each queued target receives one grasp-and-place sequence. Motion or tool-frame errors stop further sequence commands until restart. Completion means commands finished, not that a successful physical grasp was measured.
 
+## TCP transport and recovery
+
+The hand connection uses fixed-size binary frames, retaining the existing wire layout. Nonblocking reads and writes continue until the entire frame is transferred. One monotonic deadline covers both the command and its response; partial progress or interrupted system calls do not reset that deadline. EOF, reset, timeout, or another I/O failure closes the connection. Partial responses never update or publish hand feedback.
+
+The launch exposes these private parameters:
+
+- `hand_port`: 20008 by default, range 1–65535.
+- `hand_connect_timeout_ms`: 250 ms per connection attempt.
+- `hand_io_timeout_ms`: 100 ms for a complete request/response exchange.
+- `hand_reconnect_delay_ms`: 1000 ms between failed attempts or after a lost connection.
+
+Timeout and retry parameters accept 1–60000 ms. The retry delay starts after an attempt ends. A wall-clock timer and main-loop rate schedule communication, so paused ROS simulation time does not suspend recovery. A callback can spend up to the connection budget plus the exchange budget when reconnecting; this is bounded synchronous I/O, not a real-time control guarantee.
+
+Startup connection failure still exits with a nonzero status. A runtime failure stops the grasp sequence and suppresses hand/glove state publication. The connection retries automatically and resumes feedback publication only after a complete response. The next exchange sends the latest command state, including any externally updated setpoints, rather than an unfinished byte suffix. The grasp sequence requires a node restart to run again.
+
+The protocol has no transaction identifier or acknowledgement of physical execution. A lost response cannot establish whether the preceding command took effect; reconnection is not an exactly-once command guarantee. Reconnection does not stop an arm movement already executing inside the separate RealMan SDK.
+
 ## Validation
 
 ```sh
@@ -67,7 +84,7 @@ catkin_test_results build/test_results
 catkin_make -j2 install
 ```
 
-The regression suite uses the production state machine and ROS subscriber with a fake arm backend; it does not connect to hardware. It covers initial-state transitions, empty and exhausted queues, batch processing, motion and tool failures, invalid detection data, fixed-pose selection, subscriber lifetime, and target configuration.
+The regression suite uses the production state machine and ROS subscriber with a fake arm backend; it does not connect to hardware. It covers initial-state transitions, empty and exhausted queues, batch processing, motion and tool failures, invalid detection data, fixed-pose selection, subscriber lifetime, and target configuration. Additional TCP tests cover fragmented and coalesced frames, write backpressure, connect/read/write deadlines, interrupted waits, EOF/reset, retry delay, partial-response rejection, and feedback publication after recovery.
 
 `tools/ros-noetic.Dockerfile` provides an ARM64-compatible build environment using the bundled SDK. See [validation notes](docs/validation.md) for the checks performed and remaining limitations.
 

@@ -23,7 +23,7 @@ Linux ARM64, Ubuntu 20.04, ROS Noetic, GCC 9, and the bundled ARM64 RealMan SDK.
 ## Results
 
 - ARM64 `catkin_make -j2 -DCMAKE_BUILD_TYPE=RelWithDebInfo`: passed, including message generation and final executable linkage.
-- `catkin_make -j2 run_tests_HandTCPCommunication`: 11 regression cases passed; no failures.
+- `catkin_make -j2 run_tests_HandTCPCommunication`: 28 distinct regression cases passed (11 grasp/vision, 11 TCP stream, 6 TCP recovery); no failures.
 - `catkin_make -j2 install`: passed.
 - Installed left and right URDF: each contains 21 links, 20 joints, and 42 mesh references; every referenced asset exists.
 - Installed controller: all dynamic libraries resolve.
@@ -31,4 +31,14 @@ Linux ARM64, Ubuntu 20.04, ROS Noetic, GCC 9, and the bundled ARM64 RealMan SDK.
 
 ## Limits
 
-No physical arm, hand, camera, or detector was used. Tests replace arm movement methods, while exercising the production state machine and a real ROS publisher/subscriber. Firmware compatibility, calibrated poses, collision clearance, TCP framing and disconnect recovery, and physical grasp quality still require separate validation. The legacy hand-eye solver and point-cloud path are not validated as a complete vision pipeline. The existing uppercase ROS package name is preserved for topic/message compatibility.
+No physical arm, hand, camera, or detector was used. Tests replace arm movement methods, while exercising the production state machine and a real ROS publisher/subscriber. Firmware compatibility, calibrated poses, collision clearance, firmware behavior during disconnect/reconnect, and physical grasp quality still require separate validation. The legacy hand-eye solver and point-cloud path are not validated as a complete vision pipeline. The existing uppercase ROS package name is preserved for topic/message compatibility.
+
+## TCP follow-up
+
+`TcpStream` owns a nonblocking socket and provides complete-frame reads and writes. A monotonic deadline remains fixed across partial transfers, EAGAIN, and EINTR. The controller shares one deadline across command write and response read, rejects incomplete responses, closes failed streams, and reconnects with a bounded attempt timeout and retry interval. SIGPIPE is suppressed per socket/write.
+
+The wall timer and wall-rate main loop continue to service connections independently of ROS simulation time. The grasp state machine waits for valid initial feedback and enters its terminal state after a runtime transport failure. Restored communication does not resume that sequence. State publishers stay silent until fresh, complete feedback is available.
+
+Regression tests use real loopback sockets and the production transport. A small send buffer and a delayed reader exercise short writes and backpressure. Fragmented, coalesced, truncated, delayed, and reset responses exercise receive handling. A full accept queue tests connection timeout without an external network dependency. ROS integration tests verify retry pacing, feedback invalidation, fresh data after reconnect, preservation of the last complete snapshot, and suppression of stale state publication.
+
+TCP validation completed on the same ARM64 ROS Noetic environment: controller build/link, all 28 distinct regression cases, and installation passed. The installed executable has no unresolved dynamic-library dependencies. Recovery also passed with `/use_sim_time=true` and no clock messages. The tests use local sockets and a fake arm backend; physical device behavior was not exercised.

@@ -14,7 +14,6 @@ namespace AIMOcommunicate
         Hand_TCPCommunication_Json_Launch_Deal();
         if (handEnable == true)
         {
-            Hand_TCPCommunication_Init();
             Hand_InitDataSend();
             GetHandEyeCalibrationResultX_EyeInHand();
         }
@@ -31,6 +30,7 @@ namespace AIMOcommunicate
     }
     void TCPCommunication_Hand::grep_run()
     {
+        if (!m_hand_isConnected || !hand_feedback_valid) return;
         if (target_poses.size() < 5)
         {
             ROS_ERROR_THROTTLE(5, "Five configured arm poses are required");
@@ -3040,11 +3040,10 @@ namespace AIMOcommunicate
     }
     void TCPCommunication_Hand::Hand_TCPCommunication_stop(void)
     {
-        if (m_hand_isConnected == true)
-        {
-            close(m_server_hand_sockfd);
-            m_hand_isConnected = false;
-        }
+        m_hand_timer.stop();
+        hand_stream.close();
+        m_hand_isConnected = false;
+        hand_feedback_valid = false;
     }
     void TCPCommunication_Hand::Hand_TCPCommunication_Json_Launch_Deal(void)
     {
@@ -3064,19 +3063,6 @@ namespace AIMOcommunicate
         m_hand_tcp_nh.param<float>("arm/pose_RZ", movej_p_pose.rz, 0.1);
     }
 
-    void TCPCommunication_Hand::Hand_TCPCommunication_Init(void)
-    {
-        m_server_hand_sockfd = socket(AF_INET, SOCK_STREAM, 0);
-        ROS_WARN(" --- TCPCommunication_Hand Init! ---");
-        if (m_server_hand_sockfd < 0)
-        {
-            ROS_ERROR("Failed to create socket");
-        }
-        m_server_hand_addr.sin_family = AF_INET;
-        m_server_hand_addr.sin_addr.s_addr = inet_addr(m_server_hand_ip.c_str());
-        m_server_hand_addr.sin_port = htons(m_server_hand_port);
-        // fcntl(m_server_hand_sockfd, F_SETFL, O_NONBLOCK);  // 非阻塞通讯
-    }
     void TCPCommunication_Hand::Hand_InitDataSend(void)
     {
         HandClient_Send.Set_Force_RightHand.Joint1 = JointEffort;
@@ -3340,19 +3326,31 @@ namespace AIMOcommunicate
     }
     bool TCPCommunication_Hand::Hand_TCPCommunication_connect(const ros::NodeHandle &ros_TCP_nh)
     {
-        if (!handEnable || m_server_hand_sockfd < 0) return false;
-        int connect_status;
+        if (!handEnable) return false;
         m_hand_tcp_nh = ros_TCP_nh;
-        connect_status = connect(m_server_hand_sockfd, reinterpret_cast<struct sockaddr *>(&m_server_hand_addr), sizeof(m_server_hand_addr));
-        if (connect_status != 0)
+        ros::NodeHandle private_node("~");
+        private_node.param("hand_port", m_server_hand_port, 20008);
+        private_node.param("hand_connect_timeout_ms", hand_connect_timeout_ms, 250);
+        private_node.param("hand_io_timeout_ms", hand_io_timeout_ms, 100);
+        private_node.param("hand_reconnect_delay_ms", hand_reconnect_delay_ms, 1000);
+        if (m_server_hand_port < 1 || m_server_hand_port > 65535 ||
+            hand_connect_timeout_ms < 1 || hand_connect_timeout_ms > 60000 ||
+            hand_io_timeout_ms < 1 || hand_io_timeout_ms > 60000 ||
+            hand_reconnect_delay_ms < 1 || hand_reconnect_delay_ms > 60000)
+        {
+            ROS_ERROR("Invalid hand TCP port or timeout configuration");
+            return false;
+        }
+        if (!initTargetPoses()) return false;
+        if (hand_stream.connectTo(m_server_hand_ip, m_server_hand_port,
+                                  hand_connect_timeout_ms) != TcpStream::Result::Complete)
         {
             ROS_ERROR("Hand TCP connection failed");
             return false;
         }
-
         m_hand_isConnected = true;
-        m_hand_timer = ros_TCP_nh.createTimer(ros::Duration(0.02), &TCPCommunication_Hand::Hand_TCPSendRecvMessage, this);
-        std::cout << " m_hand_timer is start " << std::endl;
+        hand_feedback_valid = false;
+        m_hand_timer = ros_TCP_nh.createWallTimer(ros::WallDuration(0.02), &TCPCommunication_Hand::Hand_TCPSendRecvMessage, this);
 
         sub_right_hand = m_hand_tcp_nh.subscribe("/right_hand_control", 10, &TCPCommunication_Hand::RightHandCtrl_subCallback, this);
         sub_left_hand = m_hand_tcp_nh.subscribe("/left_hand_control", 10, &TCPCommunication_Hand::LeftHandCtrl_subCallback, this);
@@ -3366,7 +3364,6 @@ namespace AIMOcommunicate
         // pose_pub = m_hand_tcp_nh.advertise<geometry_msgs::Pose>("/arm_target_pose", 10);
         connectVisual(m_hand_tcp_nh);
         //  初始化目标位姿队列
-        if (!initTargetPoses()) return false;
         current_index = 0;
         return true;
     }
@@ -3906,6 +3903,7 @@ namespace AIMOcommunicate
 
     void TCPCommunication_Hand::RightHand_pubFunction(void)
     {
+        if (!hand_feedback_valid) return;
         sensor_msgs::JointState joint_state;
         joint_state.header.stamp = ros::Time::now();
         joint_state.header.frame_id = "right_hand";
@@ -3943,6 +3941,7 @@ namespace AIMOcommunicate
     }
     void TCPCommunication_Hand::LeftHand_pubFunction(void)
     {
+        if (!hand_feedback_valid) return;
         sensor_msgs::JointState joint_state;
         joint_state.header.stamp = ros::Time::now();
         joint_state.header.frame_id = "left_hand";
@@ -3981,6 +3980,7 @@ namespace AIMOcommunicate
 
     void TCPCommunication_Hand::RightGlove_pubFunction(void)
     {
+        if (!hand_feedback_valid) return;
         sensor_msgs::JointState joint_state;
         joint_state.header.stamp = ros::Time::now();
         joint_state.header.frame_id = "right_glove";
@@ -4011,6 +4011,7 @@ namespace AIMOcommunicate
     }
     void TCPCommunication_Hand::LeftGlove_pubFunction(void)
     {
+        if (!hand_feedback_valid) return;
         sensor_msgs::JointState joint_state;
         joint_state.header.stamp = ros::Time::now();
         joint_state.header.frame_id = "left_glove";
@@ -4041,32 +4042,52 @@ namespace AIMOcommunicate
     }
 
     ///////////////////////////////////////////////////////////////////////////
-    void TCPCommunication_Hand::Hand_TCPSendRecvMessage(const ros::TimerEvent &event)
+    void TCPCommunication_Hand::Hand_TCPSendRecvMessage(const ros::WallTimerEvent &)
     {
-        Hand_DataDeal_Struct(m_server_hand_sockfd);
+        if (!m_hand_isConnected)
+        {
+            if (TcpStream::Clock::now() < next_hand_connect) return;
+            if (hand_stream.connectTo(m_server_hand_ip, m_server_hand_port,
+                                      hand_connect_timeout_ms) != TcpStream::Result::Complete)
+            {
+                next_hand_connect = TcpStream::Clock::now() +
+                    std::chrono::milliseconds(hand_reconnect_delay_ms);
+                ROS_WARN_THROTTLE(5, "Hand TCP reconnect failed");
+                return;
+            }
+            m_hand_isConnected = true;
+            ROS_INFO("Hand TCP connection restored; grasp sequence remains stopped");
+        }
+        if (Hand_DataDeal_Struct() != 0)
+        {
+            // Never reuse a stream after an incomplete request or response.
+            hand_stream.close();
+            m_hand_isConnected = false;
+            hand_feedback_valid = false;
+            show_step = 9;
+            next_hand_connect = TcpStream::Clock::now() +
+                std::chrono::milliseconds(hand_reconnect_delay_ms);
+        }
     }
 
-    int TCPCommunication_Hand::Hand_DataDeal_Struct(const int connect_sockfd)
+    int TCPCommunication_Hand::Hand_DataDeal_Struct()
     {
         Hand_SendStructDataDeal(HandClient_Send, TCP_SendStruct_Data);
-        if ((send(connect_sockfd, &TCP_SendStruct_Data, sizeof(TCP_SendStruct_Data), 0)) < 0)
+        const auto deadline = TcpStream::Clock::now() +
+            std::chrono::milliseconds(hand_io_timeout_ms);
+        auto result = hand_stream.writeAll(&TCP_SendStruct_Data, sizeof(TCP_SendStruct_Data), deadline);
+        Hand_RecvStruct response{};
+        if (result == TcpStream::Result::Complete)
+            result = hand_stream.readAll(&response, sizeof(response), deadline);
+        if (result != TcpStream::Result::Complete)
         {
-            ROS_WARN("hand TCP send Hand_SendDataStr error!");
+            ROS_WARN_THROTTLE(5, "Hand TCP exchange failed (%s); discarding connection",
+                result == TcpStream::Result::Timeout ? "timeout" : "connection error");
             return -1;
         }
-
-        if (recv(connect_sockfd, &TCP_RecvStruct_Data, sizeof(TCP_RecvStruct_Data), 0) < 0)
-        {
-            ROS_WARN("hand TCP recv error!");
-            return -1;
-        }
-
-        // std::cout << static_cast<int>(sizeof(TCP_RecvStruct_Data)) << std::endl;
-        // std::cout << "TCP_RecvStruct_Data: " << TCP_RecvStruct_Data.Get_CurrentPoint_RightHand.Joint1
-        // << ", " << TCP_RecvStruct_Data.Get_CurrentPoint_RightHand.Joint2 << ", " << TCP_RecvStruct_Data.Get_CurrentPoint_RightHand.Joint3
-        // << ", " << TCP_RecvStruct_Data.Get_CurrentPoint_RightHand.Joint4 << ", " << TCP_RecvStruct_Data.Get_CurrentPoint_RightHand.Joint5
-        // << std::endl;
-        Hand_RecvStructDataDeal(TCP_RecvStruct_Data, HandClient_Recv);
+        TCP_RecvStruct_Data = response;
+        Hand_RecvStructDataDeal(response, HandClient_Recv);
+        hand_feedback_valid = true;
         return 0;
     }
     void TCPCommunication_Hand::Hand_SendStructDataDeal(TCP_Hand_SendData handData, Hand_SendStruct &sendData)

@@ -8,6 +8,8 @@ struct GraspTestAccess {
     static void step(TCPCommunication_Hand &h, int s) { h.show_step = s; }
     static void tick(TCPCommunication_Hand &h) { h.show_count_obj = 0; h.grep_run(); }
     static void configure(TCPCommunication_Hand &h) {
+        h.m_hand_isConnected = true;
+        h.hand_feedback_valid = true;
         h.target_poses.resize(5);
         h.tools_farmeName.resize(8, "tool");
         h.connectVisual(ros::NodeHandle());

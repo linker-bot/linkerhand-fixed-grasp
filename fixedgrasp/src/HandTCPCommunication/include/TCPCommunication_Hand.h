@@ -6,6 +6,7 @@
 #define HAND_TCP_COMMUNICATION_H
 
 #include "GeneralFunction.h"
+#include "TcpStream.h"
 #include <json/json.h>
 #include "rm_service.h"
 #include <std_msgs/Float32MultiArray.h>
@@ -163,7 +164,6 @@ namespace AIMOcommunicate
 
     private:
         void Hand_InitDataSend(void);
-        void Hand_TCPCommunication_Init(void);
         void Hand_TCPCommunication_stop(void);
         void Hand_TCPCommunication_Json_Launch_Deal();
 
@@ -172,9 +172,13 @@ namespace AIMOcommunicate
         TCP_Hand_SendData HandClient_Send{};
 
     private: // 通讯连接变量
-        struct sockaddr_in m_server_hand_addr{};
-        int m_server_hand_port;
-        int m_server_hand_sockfd = -1;
+        TcpStream hand_stream;
+        int m_server_hand_port = 20008;
+        int hand_connect_timeout_ms = 250;
+        int hand_io_timeout_ms = 100;
+        int hand_reconnect_delay_ms = 1000;
+        TcpStream::Deadline next_hand_connect{};
+        bool hand_feedback_valid = false;
         int show_step = 0;
         int show_count = 0;
         int show_count_obj = 0;
@@ -199,7 +203,7 @@ namespace AIMOcommunicate
         ros::Publisher pub_right_glove;
         ros::Publisher pub_left_glove;
 
-        ros::Timer m_hand_timer;
+        ros::WallTimer m_hand_timer;
         bool m_hand_isConnected = false;
 
         /////////////
@@ -207,6 +211,7 @@ namespace AIMOcommunicate
         ros::Subscriber detection_sub;
         void connectVisual(ros::NodeHandle node);
         friend struct GraspTestAccess;
+        friend struct TcpTestAccess;
         ros::Publisher pose_pub;
         ros::Publisher arm_reached_pub;
         ros::Publisher get_Visual_pub;
@@ -232,10 +237,10 @@ namespace AIMOcommunicate
             signal(SIGALRM, [](int) {});
             alarm(seconds);
         }
-        void Hand_TCPSendRecvMessage(const ros::TimerEvent &event);
+        void Hand_TCPSendRecvMessage(const ros::WallTimerEvent &event);
 
         // 结构体通讯
-        int Hand_DataDeal_Struct(const int connect_sockfd);
+        int Hand_DataDeal_Struct();
         void Hand_SendStructDataDeal(TCP_Hand_SendData handData, Hand_SendStruct &sendData);
         void Hand_RecvStructDataDeal(Hand_RecvStruct recvData, TCP_Hand_RecvData &handData);
         Hand_SendStruct TCP_SendStruct_Data{};

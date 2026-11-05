@@ -37,7 +37,7 @@ set_target_properties(RM_Service PROPERTIES IMPORTED_LOCATION "${RM_SERVICE_LIBR
 
 add_subdirectory(handeyesolver)
 add_library(TCPCommunication_Hand
-  src/TCPCommunication_Hand.cpp src/CoordinateTransform.cpp src/HandEyeCalibration.cpp)
+  src/TCPCommunication_Hand.cpp src/TcpStream.cpp src/CoordinateTransform.cpp src/HandEyeCalibration.cpp)
 add_dependencies(TCPCommunication_Hand ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 target_link_libraries(TCPCommunication_Hand PUBLIC handeyesolver Eigen3::Eigen
   ${catkin_LIBRARIES} ${JSONCPP_LIBRARIES} RM_Service)
@@ -62,5 +62,14 @@ if(CATKIN_ENABLE_TESTING)
   add_rostest_gtest(grasp_regression test/grasp_regression.test test/grasp_regression.cpp)
   if(TARGET grasp_regression)
     target_link_libraries(grasp_regression TCPCommunication_Hand)
+  endif()
+  find_package(Threads REQUIRED)
+  catkin_add_gtest(tcp_stream_regression test/tcp_stream_regression.cpp src/TcpStream.cpp)
+  if(TARGET tcp_stream_regression)
+    target_link_libraries(tcp_stream_regression Threads::Threads)
+  endif()
+  add_rostest_gtest(tcp_recovery_regression test/tcp_recovery_regression.test test/tcp_recovery_regression.cpp)
+  if(TARGET tcp_recovery_regression)
+    target_link_libraries(tcp_recovery_regression TCPCommunication_Hand)
   endif()
 endif()

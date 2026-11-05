@@ -18,7 +18,7 @@ int main(int argc, char **argv)
 
     AIMOcommunicate::TCPCommunication_Hand handCtrl;
     if (!handCtrl.Hand_TCPCommunication_connect(node)) return 1;
-    ros::Rate loop_rate(30); // 设置发布频率（以每秒100次的速率发布数据）
+    ros::WallRate loop_rate(30);
     if (!handCtrl.InitArm()) return 1;
 
     while (ros::ok())

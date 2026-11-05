@@ -2,6 +2,10 @@
 <!-- -*- mode: XML -*- -->
 <launch>
 	<arg name="hand_ip" default="192.168.1.40"/>			   
+    <arg name="hand_port" default="20008"/>
+    <arg name="hand_connect_timeout_ms" default="250"/>
+    <arg name="hand_io_timeout_ms" default="100"/>
+    <arg name="hand_reconnect_delay_ms" default="1000"/>
     <arg name="handEnable" default="true"/>	 
 
     <arg name="Hand_Freedom" default="16"/> <!-- -*-6/9/10/16 自由度选择; 100 最小系统遥操作控制；106/109/110/116  最小系统机械手自由度选择;-*- -->	
@@ -18,6 +22,10 @@
 	<node pkg="HandTCPCommunication" type="HandCtrl_node" name="arm" required="true" output="screen" respawn="false">
 		
         <param name="hand_ip" value="$(arg hand_ip)" />  
+        <param name="hand_port" value="$(arg hand_port)"/>
+        <param name="hand_connect_timeout_ms" value="$(arg hand_connect_timeout_ms)"/>
+        <param name="hand_io_timeout_ms" value="$(arg hand_io_timeout_ms)"/>
+        <param name="hand_reconnect_delay_ms" value="$(arg hand_reconnect_delay_ms)"/>
         <param name="handEnable" value="$(arg handEnable)" /> 
 
         <param name="Hand_Freedom" value="$(arg Hand_Freedom)" />
