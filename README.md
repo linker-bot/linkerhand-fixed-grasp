@@ -81,6 +81,20 @@ At the initial position, the controller publishes `detect_objects` on `/aimo/rob
 
 One valid snapshot creates a batch. Unknown labels are ignored; duplicate preset IDs are queued once. Empty snapshots finish the batch when fixed targets are configured. Without configured targets, the controller remains waiting. Each queued target receives one grasp-and-place sequence. Motion or tool-frame errors stop further sequence commands until restart. Completion means commands finished, not that a successful physical grasp was measured.
 
+## Legacy visual point-cloud callback
+
+`GetVisualData_subCallback()` accepts the legacy custom `PointCloud2` snapshot format. The default launch still subscribes to the 2D detector interface; it does not subscribe this point-cloud callback to a topic.
+
+A nonempty snapshot requires the fields `cls`, `x1`, `y1`, `z1`, `x2`, `y2`, `z2`, `a`, `b`, `c`, and `d`. Each required field must contain exactly one `FLOAT32`. `cls` is an integer preset ID from 1 to 8; IDs must be distinct within a snapshot. `x1/y1/z1` are camera-frame coordinates and `x2/y2/z2` form a nonzero camera-frame direction vector. `a/b/c/d` are preserved metadata and do not determine the grasp pose. All required values must be finite, including when `is_dense` is false.
+
+Fields must have distinct names and nonoverlapping byte ranges within `point_step`. Valid extra fields and point padding are accepted. The decoder respects `row_step`, including row padding in organized clouds, handles both byte orders, and accepts unaligned offsets. The data length must equal `row_step * height`, and each row must fit its declared points. At most eight points are supported. An empty snapshot has zero width, height 0 or 1, zero row stride, and no data; it may omit all fields with zero point stride.
+
+The callback accepts snapshots only with validated configuration while waiting for a result. Parsing and task construction finish before either the decoded objects or task queue is replaced. Invalid snapshots leave both unchanged and do not mark detection complete. Valid empty snapshots clear the batch; objects absent from a new snapshot are removed, while attempt counts for retained IDs are preserved.
+
+Task position uses the existing observation pose and validated hand-eye matrix. Direction is rotated into the base frame without translation; its base-XY projection determines yaw in `[-π/2, π/2]`. A zero or near-vertical direction without a stable XY projection is rejected. Roll and pitch come from the transformed camera orientation using the existing XYZ Euler convention. Every task member is initialized, and transformed positions are checked against the SDK float range and any configured workspace bounds.
+
+The callback retains the legacy fixed observation pose. It does not obtain a synchronized live arm pose or establish a complete camera-driven grasp pipeline. Sensor schema, frame convention, and physical grasp behavior still require device validation.
+
 ## Hand-eye calibration file
 
 Set `hand_eye_calibration_file:=/absolute/path/calibration.txt` on the launch command, or set the same private parameter in the deployment YAML. The default resolves to `CalibrateMatrix_EyeInHand.txt` in the package in both devel and install spaces. Paths are not prefixed with the package directory when overridden.
@@ -119,7 +133,7 @@ catkin_test_results build/test_results
 catkin_make -j2 install
 ```
 
-The regression suite uses the production state machine and ROS subscriber with a fake arm backend; it does not connect to hardware. It covers initial-state transitions, empty and exhausted queues, batch processing, motion and tool failures, invalid detection data, fixed-pose selection, subscriber lifetime, and target configuration. Additional TCP tests cover fragmented and coalesced frames, write backpressure, connect/read/write deadlines, interrupted waits, EOF/reset, retry delay, partial-response rejection, and feedback publication after recovery. Configuration tests cover malformed files and parameters, bounds, atomic loads, failure before hardware connections, and endpoint/speed forwarding to a fake SDK backend. Calibration tests cover file bounds, malformed values, rigid-transform checks, zero-translation rotations, parameter overrides, and invalidation after a failed reload.
+The regression suite uses the production state machine and ROS subscriber with a fake arm backend; it does not connect to hardware. It covers initial-state transitions, empty and exhausted queues, batch processing, motion and tool failures, invalid detection data, fixed-pose selection, subscriber lifetime, and target configuration. Additional TCP tests cover fragmented and coalesced frames, write backpressure, connect/read/write deadlines, interrupted waits, EOF/reset, retry delay, partial-response rejection, and feedback publication after recovery. Configuration tests cover malformed files and parameters, bounds, atomic loads, failure before hardware connections, and endpoint/speed forwarding to a fake SDK backend. Calibration tests cover file bounds, malformed values, rigid-transform checks, zero-translation rotations, parameter overrides, and invalidation after a failed reload. Point-cloud tests cover malformed layouts and fields, byte order, row padding, sparse IDs, initialized tasks, and atomic callback updates.
 
 `tools/ros-noetic.Dockerfile` provides an ARM64-compatible build environment using the bundled SDK. See [validation notes](docs/validation.md) for the checks performed and remaining limitations.
 

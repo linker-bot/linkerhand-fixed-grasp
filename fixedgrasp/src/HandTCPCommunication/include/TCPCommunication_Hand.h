@@ -8,6 +8,7 @@
 #include "GeneralFunction.h"
 #include "TcpStream.h"
 #include "ControllerConfiguration.h"
+#include "VisualPointCloud.h"
 #include <json/json.h>
 #include "rm_service.h"
 #include <std_msgs/Float32MultiArray.h>
@@ -102,28 +103,6 @@ struct TCP_Hand_RecvData
     HumanHandParam Get_CurrentPoint_LeftGlove;
 };
 
-struct ObjectData
-{
-    int id;      // 物品 ID
-    float cen_x; // 物品中心 X 坐标
-    float cen_y; // 物品中心 Y 坐标
-    float cen_z; // 物品深度信息
-    float vec_x; // 物品在基座坐标系下 X 轴的方向
-    float vec_y;
-    float vec_z; // 物品在基座坐标系下 Y 轴的方向
-    float a;
-    float b;
-    float c;
-    float d;
-    int count;
-
-    // 默认构造函数，初始化所有成员为 0
-    ObjectData()
-        : id(0), cen_x(0.0f), cen_y(0.0f), cen_z(0.0f),
-          vec_x(0.0f), vec_y(0.0f), vec_z(0.0f),
-          a(0.0f), b(0.0f), c(0.0f), d(0.0f), count(0) {}
-};
-
 namespace AIMOcommunicate
 {
     class TCPCommunication_Hand
@@ -204,6 +183,7 @@ namespace AIMOcommunicate
         friend struct GraspTestAccess;
         friend struct TcpTestAccess;
         friend struct ConfigurationTestAccess;
+        friend struct VisualCloudTestAccess;
         ros::Publisher pose_pub;
         ros::Publisher arm_reached_pub;
         ros::Publisher get_Visual_pub;

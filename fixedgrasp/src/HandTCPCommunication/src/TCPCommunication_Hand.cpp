@@ -3407,132 +3407,35 @@ namespace AIMOcommunicate
     //////////////////////天慧视觉topic解析
     void TCPCommunication_Hand::GetVisualData_subCallback(const sensor_msgs::PointCloud2ConstPtr &GridData)
     {
-        if (!if_complite)
+        if (!configuration_valid || show_step != 1 || if_complite) return;
+        if (!GridData)
         {
-            object_data.clear();
-            //  获取字段信息
-            const std::vector<sensor_msgs::PointField> &fields = GridData->fields;
-
-            // 获取数据指针
-            const uint8_t *data_ptr = &GridData->data[0];
-            int id;
-            ObjectData obj_data;
-            float cls, x1, y1, z1, x2, y2, z2, a, b, c, d;
-            size_t point_step = GridData->point_step; // 每个点的步长，包含所有字段的大小
-
-            // // 遍历每个点的数据
-            for (size_t i = 0; i < GridData->width * GridData->height; ++i)
-            {
-                // 获取当前点的起始地址
-                const uint8_t *point_ptr = data_ptr + i * point_step;
-                // 从当前点的内存位置解析数据
-                memcpy(&cls, point_ptr + getFieldOffset(fields, "cls"), sizeof(float));
-                obj_data.id = static_cast<int>(cls);
-                memcpy(&obj_data.cen_x, point_ptr + getFieldOffset(fields, "x1"), sizeof(float));
-                memcpy(&obj_data.cen_y, point_ptr + getFieldOffset(fields, "y1"), sizeof(float));
-                memcpy(&obj_data.cen_z, point_ptr + getFieldOffset(fields, "z1"), sizeof(float));
-                memcpy(&obj_data.vec_x, point_ptr + getFieldOffset(fields, "x2"), sizeof(float));
-                memcpy(&obj_data.vec_y, point_ptr + getFieldOffset(fields, "y2"), sizeof(float));
-                memcpy(&obj_data.vec_z, point_ptr + getFieldOffset(fields, "z2"), sizeof(float));
-                memcpy(&obj_data.a, point_ptr + getFieldOffset(fields, "a"), sizeof(float));
-                memcpy(&obj_data.b, point_ptr + getFieldOffset(fields, "b"), sizeof(float));
-                memcpy(&obj_data.c, point_ptr + getFieldOffset(fields, "c"), sizeof(float));
-                memcpy(&obj_data.d, point_ptr + getFieldOffset(fields, "d"), sizeof(float));
-
-                object_data.push_back(obj_data);
-
-                // // 处理数据，例如打印出来
-                ROS_INFO("cls: %d, x1: %f, y1: %f, z1: %f, x2: %f, y2: %f, z2: %f, a: %f, b: %f, c: %f, d: %f",
-                         object_data[id - 1].id, object_data[id - 1].cen_x, object_data[id - 1].cen_y, object_data[id - 1].cen_z, object_data[id - 1].vec_x, object_data[id - 1].vec_y, object_data[id - 1].vec_z, object_data[id - 1].a, object_data[id - 1].b, object_data[id - 1].c, object_data[id - 1].d);
-            }
-            Pose robot;
-            robot.position.x = -0.382;
-            robot.position.y = 0;
-            robot.position.z = 0.496;
-            robot.euler.rx = 3.142;
-            robot.euler.ry = 1.571;
-            robot.euler.rz = 0;
-
-            for (size_t i = 0; i < object_data.size(); i++)
-            {
-                Pose camera_point;
-                camera_point.position.x = object_data[i].cen_x;
-                camera_point.position.y = object_data[i].cen_y;
-                camera_point.position.z = object_data[i].cen_z;
-                camera_point.euler.rx = 0;
-                camera_point.euler.ry = 0;
-                camera_point.euler.rz = 0;
-
-                Pose robot_zh;
-                robot_zh = coorTrans.GetGraspPose(camera_point, robot, Calibration_Result_EyeInHand);
-                pass_obj.rz = Getry_pose(object_data[i].vec_x, object_data[i].vec_y, object_data[i].vec_z);
-                Grap_Obj pass_obj;
-                pass_obj.ID = object_data[i].id;
-                pass_obj.x = robot_zh.position.x;
-                pass_obj.y = robot_zh.position.y;
-                pass_obj.z = robot_zh.position.z;
-
-                // 如果 obj_list 为空，直接将物品添加到 obj_list 中
-                if (obj_list.empty())
-                {
-                    obj_list.push_back(pass_obj);
-                }
-                else
-                {
-                    bool found = false;
-                    // 遍历 obj_list 中的元素
-                    for (auto it = obj_list.begin(); it != obj_list.end();)
-                    {
-                        if (it->ID == pass_obj.ID)
-                        {
-                            // 如果 obj_list 中已经有该 ID，更新 obj_list 中的元素
-                            it->x = pass_obj.x;
-                            it->y = pass_obj.y;
-                            it->z = pass_obj.z;
-                            it->rz = pass_obj.rz;
-                            found = true;
-                            ++it; // 继续遍历下一个元素
-                        }
-                        else
-                        {
-                            // 如果 obj_list 中的元素不在 object_data 中，删除
-                            bool to_remove = true;
-                            for (size_t j = 0; j < object_data.size(); j++)
-                            {
-                                if (object_data[j].id == it->ID)
-                                {
-                                    to_remove = false;
-                                    break;
-                                }
-                            }
-
-                            if (to_remove)
-                            {
-                                it = obj_list.erase(it); // 删除元素
-                            }
-                            else
-                            {
-                                ++it; // 保持遍历
-                            }
-                        }
-                    }
-
-                    // 如果 obj_list 中没有该 ID，添加到 obj_list 中
-                    if (!found)
-                    {
-                        obj_list.push_back(pass_obj);
-                    }
-                }
-            }
-
-            for (auto it = obj_list.begin(); it != obj_list.end();)
-            {
-                std::cout << "obj_list:ID: " << it->ID << "x = " << it->x << "y = " << it->y << "z = " << it->z << std::endl;
-                ++it;
-            }
-
-            if_complite = true;
+            ROS_ERROR("Null visual point cloud");
+            return;
         }
+        std::vector<ObjectData> objects;
+        std::vector<Grap_Obj> tasks;
+        std::string error;
+        if (!decodeVisualPointCloud(*GridData, objects, error))
+        {
+            ROS_ERROR("%s", error.c_str());
+            return;
+        }
+        // Retain the legacy observation pose; this callback is not subscribed by default.
+        Pose robot{};
+        robot.position.x = -0.382;
+        robot.position.z = 0.496;
+        robot.euler.rx = 3.142;
+        robot.euler.ry = 1.571;
+        const Eigen::Matrix4d base_from_camera = coorTrans.createTransformationMatrix(robot) * Calibration_Result_EyeInHand;
+        if (!buildVisualGraspTasks(objects, base_from_camera, arm_configuration.workspace_bounds_m, obj_list, tasks, error))
+        {
+            ROS_ERROR("%s", error.c_str());
+            return;
+        }
+        object_data.swap(objects);
+        obj_list.swap(tasks);
+        if_complite = true;
     }
     void TCPCommunication_Hand::orderDetectCallback(const HandTCPCommunication::OrderDetectResult::ConstPtr& msg)
     {

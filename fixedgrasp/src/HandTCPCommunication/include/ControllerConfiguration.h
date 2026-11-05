@@ -1,14 +1,9 @@
 #ifndef LINKERHAND_CONTROLLER_CONFIGURATION_H
 #define LINKERHAND_CONTROLLER_CONFIGURATION_H
 #include "GeneralFunction.h"
+#include "GraspTypes.h"
 #include <map>
 #include <limits>
-
-struct Grap_Obj {
-    int ID;
-    int count;
-    float x, y, z, rx, ry, rz;
-};
 
 namespace AIMOcommunicate {
 struct ArmSettings {

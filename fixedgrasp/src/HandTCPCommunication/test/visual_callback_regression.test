@@ -1,0 +1,3 @@
+<launch>
+  <test test-name="visual_callback_regression" pkg="HandTCPCommunication" type="visual_callback_regression" time-limit="60"/>
+</launch>

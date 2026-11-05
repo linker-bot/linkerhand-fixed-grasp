@@ -23,7 +23,7 @@ Linux ARM64, Ubuntu 20.04, ROS Noetic, GCC 9, and the bundled ARM64 RealMan SDK.
 ## Results
 
 - ARM64 `catkin_make -j2 -DCMAKE_BUILD_TYPE=RelWithDebInfo`: passed, including message generation and final executable linkage.
-- `catkin_make -j2 run_tests_HandTCPCommunication`: 76 distinct regression cases passed (11 grasp/vision, 11 TCP stream, 6 TCP recovery, 27 configuration, 16 calibration matrix, 5 launch parameters); no failures.
+- `catkin_make -j2 run_tests_HandTCPCommunication`: 102 distinct regression cases passed (11 grasp/vision, 11 TCP stream, 6 TCP recovery, 27 configuration, 16 calibration matrix, 5 launch parameters, 19 point-cloud decode/task, 7 point-cloud callback); no failures.
 - `catkin_make -j2 install`: passed.
 - Installed left and right URDF: each contains 21 links, 20 joints, and 42 mesh references; every referenced asset exists.
 - Installed controller: all dynamic libraries resolve.
@@ -72,4 +72,27 @@ g++ -std=c++11 -g -O1 -fsanitize=address,undefined -fno-omit-frame-pointer \
   fixedgrasp/src/HandTCPCommunication/src/CalibrationMatrix.cpp \
   -lgtest -lpthread -o /tmp/calibration-sanitized
 ASAN_OPTIONS=detect_leaks=1 /tmp/calibration-sanitized
+```
+
+## Visual point-cloud callback follow-up
+
+The custom point-cloud decoder validates required field names, FLOAT32 type/count, field spans and overlaps, strides, payload size, finite values, and distinct integer preset IDs before accessing point bytes. It supports both byte orders, unaligned fields, organized row padding, and canonical empty clouds. Dimension and field-span calculations are checked before indexing. Class IDs are no longer used as vector indices.
+
+Decoded objects and fully initialized grasp tasks are built in temporary vectors. The callback commits them only after the entire snapshot, coordinate transform, direction projection, and workspace checks succeed. It accepts input only in the waiting state with validated configuration. Failed messages preserve the previous snapshot and allow retry. Valid snapshots remove absent objects and retain existing attempt counts. The shadowed task variable and writes to the unrelated current-object member were removed.
+
+The default subscription remains the 2D detector interface. The point-cloud callback retains its legacy fixed observation pose; this change does not validate sensor integration, live arm-pose synchronization, or physical grasp performance.
+
+Validation passed on Linux ARM64 / ROS Noetic: build/link, all 102 distinct regression cases, installation, and installed-library resolution. The 26 new cases comprise 19 decoder/task-builder tests and 7 controller-callback tests. All 19 decoder/task-builder cases also passed AddressSanitizer and UndefinedBehaviorSanitizer with leak detection enabled and no findings. No physical camera, hand, or arm was used.
+
+The point-cloud sanitizer check was run inside the Linux test container from the repository root after sourcing ROS Noetic:
+
+```sh
+g++ -std=c++11 -g -O1 -fsanitize=address,undefined -fno-omit-frame-pointer \
+  -Ifixedgrasp/src/HandTCPCommunication/include -I/usr/include/eigen3 -I/opt/ros/noetic/include \
+  fixedgrasp/src/HandTCPCommunication/test/visual_point_cloud_regression.cpp \
+  fixedgrasp/src/HandTCPCommunication/src/VisualPointCloud.cpp \
+  fixedgrasp/src/HandTCPCommunication/src/CalibrationMatrix.cpp \
+  -L/opt/ros/noetic/lib -lrostime -lcpp_common -lroscpp_serialization -lgtest -lpthread \
+  -o /tmp/visual-point-cloud-sanitized
+ASAN_OPTIONS=detect_leaks=1 /tmp/visual-point-cloud-sanitized
 ```
