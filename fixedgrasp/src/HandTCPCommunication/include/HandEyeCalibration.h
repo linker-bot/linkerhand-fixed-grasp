@@ -7,6 +7,7 @@
 #define HAND_EYE_CALIBRATION_FUNCTION
 
 #include "handeyesolver.h"
+#include <limits>
 
 namespace calibration
 {
@@ -16,6 +17,7 @@ namespace calibration
         HandEyeCalibration();
         ~HandEyeCalibration();
 
+        bool LoadEyeInHand(const std::string &path, std::string &error);
         PoseMatrix ReadCalibrationResultXFile_EyeInHand(void);
 
         PoseMatrix GetCalibrationResult_EyeInHand(void);
@@ -51,7 +53,8 @@ namespace calibration
         PoseMatrix CalibrationResultX;
         PoseMatrix ReadCalibrationResultX;
         PoseMatrix CalibrationResultX_EyeInHand;
-        PoseMatrix ReadCalibrationResultX_EyeInHand;
+        bool eye_in_hand_loaded = false;
+        PoseMatrix ReadCalibrationResultX_EyeInHand = PoseMatrix::Constant(std::numeric_limits<double>::quiet_NaN());
 
         std::vector<PoseMatrix> CalibrationHandData;
         std::vector<PoseMatrix> CalibrationEyeData;

@@ -2,6 +2,7 @@
 #define LINKERHAND_CONTROLLER_CONFIGURATION_H
 #include "GeneralFunction.h"
 #include <map>
+#include <limits>
 
 struct Grap_Obj {
     int ID;
@@ -18,7 +19,8 @@ struct ArmSettings {
 };
 struct ControllerConfiguration {
     ArmSettings arm;
-    std::string target_pose_file, tools_tcp_file;
+    std::string target_pose_file, tools_tcp_file, hand_eye_calibration_file;
+    Eigen::Matrix4d hand_eye_calibration = Eigen::Matrix4d::Constant(std::numeric_limits<double>::quiet_NaN());
     std::vector<geometry_msgs::Pose> joint_poses;
     std::vector<OXYZ_Pose> tool_offsets;
     std::vector<std::string> tool_frames;

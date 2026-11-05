@@ -12,16 +12,16 @@ struct ConfigurationTestAccess {
 class ConfigurationTest : public testing::Test {
 protected:
     ros::NodeHandle node{"~"};
-    std::string directory, pose_path, tool_path, error;
+    std::string directory, pose_path, tool_path, calibration_path, error;
     Json::Value poses, tools;
     ControllerConfiguration config;
     const std::vector<std::string> parameters = {"arm_ip", "arm_port", "arm_timeout_ms", "arm_speed_percent",
-        "target_pose_file", "tools_tcp_file", "fixed_grasp_targets", "joint_limits_deg", "workspace_bounds_m", "hand_port"};
+        "target_pose_file", "tools_tcp_file", "fixed_grasp_targets", "joint_limits_deg", "workspace_bounds_m", "hand_port", "hand_eye_calibration_file"};
     void SetUp() override {
         for (const auto &name : parameters) node.deleteParam(name);
         char pattern[] = "/tmp/linkerhand-configuration-XXXXXX";
         char *path = ::mkdtemp(pattern); ASSERT_NE(nullptr, path);
-        directory = path; pose_path = directory + "/poses.json"; tool_path = directory + "/tools.json";
+        directory = path; calibration_path = directory + "/calibration.txt"; pose_path = directory + "/poses.json"; tool_path = directory + "/tools.json";
         const auto package = ros::package::getPath("HandTCPCommunication");
         Json::Reader reader;
         std::ifstream pose_file(package + "/target_pose.json"), tool_file(package + "/tools_Tcp.json");
@@ -30,6 +30,7 @@ protected:
     }
     void TearDown() override {
         for (const auto &name : parameters) node.deleteParam(name);
+        ::unlink(calibration_path.c_str());
         ::unlink(pose_path.c_str()); ::unlink(tool_path.c_str()); ::rmdir(directory.c_str());
     }
     void write() {
@@ -252,6 +253,60 @@ TEST_F(ConfigurationTest, TreatsApiSocketAndStateFailuresAsInitializationFailure
         FakeArm arm; arm.socket_result = socket; EXPECT_FALSE(arm.InitArm()); EXPECT_EQ(0, arm.checks);
     }
     FakeArm state; state.state_result = -1; EXPECT_FALSE(state.InitArm());
+}
+TEST_F(ConfigurationTest, UsesConfiguredCalibrationPathAndPreservesZeroTranslationRotation) {
+    std::ofstream(calibration_path) << "0 -1 0 0\n1 0 0 0\n0 0 1 0\n0 0 0 1\n";
+    node.setParam("hand_eye_calibration_file", calibration_path);
+    ASSERT_TRUE(load()) << error;
+    EXPECT_EQ(calibration_path, config.hand_eye_calibration_file);
+    EXPECT_DOUBLE_EQ(-1, config.hand_eye_calibration(0, 1));
+    EXPECT_DOUBLE_EQ(0, config.hand_eye_calibration(0, 3));
+    FakeArm arm; ASSERT_TRUE(arm.InitArm());
+    EXPECT_TRUE(arm.GetHandEyeCalibrationResultX_EyeInHand().isApprox(config.hand_eye_calibration));
+}
+TEST_F(ConfigurationTest, InvalidCalibrationPreventsHardwareConnectionsAndInvalidatesGetter) {
+    node.setParam("hand_eye_calibration_file", calibration_path + ".missing");
+    test_tcp::Server server; node.setParam("hand_port", server.port);
+    FakeArm arm; ConfigurationTestAccess::enableHand(arm);
+    EXPECT_FALSE(arm.Hand_TCPCommunication_connect(ros::NodeHandle()));
+    pollfd listener{server.socket.fd, POLLIN, 0}; EXPECT_EQ(0, ::poll(&listener, 1, 20));
+    EXPECT_FALSE(arm.InitArm()); EXPECT_EQ(0, arm.initializations); EXPECT_EQ(0, arm.connects);
+    EXPECT_THROW(arm.GetHandEyeCalibrationResultX_EyeInHand(), std::logic_error);
+}
+TEST_F(ConfigurationTest, RejectsCalibrationParameterTypesAndRelativePaths) {
+    node.setParam("hand_eye_calibration_file", 3); EXPECT_FALSE(load());
+    node.setParam("hand_eye_calibration_file", ""); EXPECT_FALSE(load());
+    node.setParam("hand_eye_calibration_file", "calibration.txt"); EXPECT_FALSE(load());
+}
+TEST_F(ConfigurationTest, CalibrationFailureDoesNotCommitOrReuseOldControllerMatrix) {
+    FakeArm arm; ASSERT_TRUE(arm.InitArm()); ASSERT_TRUE(load());
+    const auto previous = config.hand_eye_calibration;
+    node.setParam("hand_eye_calibration_file", calibration_path + ".missing");
+    EXPECT_FALSE(load()); EXPECT_TRUE(config.hand_eye_calibration.isApprox(previous));
+    EXPECT_FALSE(arm.initTargetPoses());
+    EXPECT_THROW(arm.GetHandEyeCalibrationResultX_EyeInHand(), std::logic_error);
+    const int checks = arm.checks; EXPECT_FALSE(arm.armmove_j(geometry_msgs::Pose())); EXPECT_EQ(checks, arm.checks);
+}
+TEST_F(ConfigurationTest, CalibrationClassRejectsUnloadedOrFailedResultsWithoutIdentityFallback) {
+    calibration::HandEyeCalibration eye;
+    EXPECT_THROW(eye.GetCalibrationResult_EyeInHand(), std::logic_error);
+    std::ofstream(calibration_path) << "0 -1 0 0\n1 0 0 0\n0 0 1 0\n0 0 0 1\n";
+    ASSERT_TRUE(eye.LoadEyeInHand(calibration_path, error)) << error;
+    EXPECT_DOUBLE_EQ(-1, eye.GetCalibrationResult_EyeInHand()(0, 1));
+    EXPECT_FALSE(eye.LoadEyeInHand(calibration_path + ".missing", error));
+    EXPECT_THROW(eye.GetCalibrationResult_EyeInHand(), std::logic_error);
+}
+TEST_F(ConfigurationTest, LegacyReadersUseStrictLoaderAndConfiguredPath) {
+    std::ofstream(calibration_path) << "1 0 0 .1\n0 1 0 .2\n0 0 1 .3\n0 0 0 1\n";
+    node.setParam("hand_eye_calibration_file", calibration_path);
+    calibration::HandEyeCalibration eye;
+    EXPECT_DOUBLE_EQ(.1, eye.ReadCalibrationResultXFile_EyeInHand()(0, 3));
+    general::GeneralFunction helper;
+    EXPECT_DOUBLE_EQ(.2, helper.CalibrationEyetohandXRead_path(calibration_path)(1, 3));
+    EXPECT_THROW(helper.CalibrationEyetohandXRead_path("relative.txt"), std::runtime_error);
+    node.setParam("hand_eye_calibration_file", false);
+    EXPECT_THROW(eye.ReadCalibrationResultXFile_EyeInHand(), std::runtime_error);
+    EXPECT_THROW(eye.GetCalibrationResult_EyeInHand(), std::logic_error);
 }
 } // namespace AIMOcommunicate
 int main(int argc, char **argv) {

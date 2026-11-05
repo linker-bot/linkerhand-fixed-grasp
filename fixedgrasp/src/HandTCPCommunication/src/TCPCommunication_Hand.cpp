@@ -15,7 +15,6 @@ namespace AIMOcommunicate
         if (handEnable == true)
         {
             Hand_InitDataSend();
-            GetHandEyeCalibrationResultX_EyeInHand();
         }
         grep_init();
     }
@@ -3386,6 +3385,7 @@ namespace AIMOcommunicate
         {
             ROS_ERROR("%s", error.c_str());
             configuration_valid = false;
+            Calibration_Result_EyeInHand.setConstant(std::numeric_limits<double>::quiet_NaN());
             target_poses.clear();
             Tools_Tcp.clear();
             tools_farmeName.clear();
@@ -3399,6 +3399,7 @@ namespace AIMOcommunicate
         Tools_Tcp = candidate.tool_offsets;
         tools_farmeName = candidate.tool_frames;
         fixed_grasp_targets = candidate.fixed_targets;
+        Calibration_Result_EyeInHand = candidate.hand_eye_calibration;
         arm_configuration = std::move(candidate);
         configuration_valid = true;
         return true;
@@ -4275,12 +4276,9 @@ namespace AIMOcommunicate
     ///////////////////////////////手眼标定
     PoseMatrix TCPCommunication_Hand::GetHandEyeCalibrationResultX_EyeInHand()
     {
-        PoseMatrix result;
-        calibration::HandEyeCalibration handEyeDeal;
-        result << handEyeDeal.GetCalibrationResult_EyeInHand();
-        Calibration_Result_EyeInHand << result;
-        std::cout << "Calibration_Result_EyeInHand = " << Calibration_Result_EyeInHand << std::endl;
-        return result;
+        if (!configuration_valid)
+            throw std::logic_error("Controller has no validated hand-eye calibration");
+        return Calibration_Result_EyeInHand;
     }
     float TCPCommunication_Hand::Getry_pose(float vec_x, float vec_y, float vec_z)
     {

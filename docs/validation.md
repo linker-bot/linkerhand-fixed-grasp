@@ -23,7 +23,7 @@ Linux ARM64, Ubuntu 20.04, ROS Noetic, GCC 9, and the bundled ARM64 RealMan SDK.
 ## Results
 
 - ARM64 `catkin_make -j2 -DCMAKE_BUILD_TYPE=RelWithDebInfo`: passed, including message generation and final executable linkage.
-- `catkin_make -j2 run_tests_HandTCPCommunication`: 53 distinct regression cases passed (11 grasp/vision, 11 TCP stream, 6 TCP recovery, 21 configuration, 4 launch parameters); no failures.
+- `catkin_make -j2 run_tests_HandTCPCommunication`: 76 distinct regression cases passed (11 grasp/vision, 11 TCP stream, 6 TCP recovery, 27 configuration, 16 calibration matrix, 5 launch parameters); no failures.
 - `catkin_make -j2 install`: passed.
 - Installed left and right URDF: each contains 21 links, 20 joints, and 42 mesh references; every referenced asset exists.
 - Installed controller: all dynamic libraries resolve.
@@ -52,3 +52,24 @@ The configuration parser validates parameter types and ranges, file schemas, all
 Configuration is parsed into a candidate and committed only on success. Invalid configuration stops startup before hand or arm connection. A failed reload disables further arm motion commands and clears active targets. SDK calls are isolated behind overridable methods so tests verify endpoint/timeout/speed forwarding and confirm that invalid input produces no initialization, connection, or movement calls.
 
 Validation passed on Linux ARM64, Ubuntu 20.04, ROS Noetic, and GCC 9: controller build/link, all 53 distinct test cases, and installation. The installed executable has no unresolved dynamic-library dependencies. Devel and install launch checks confirmed default JSON paths, endpoint/speed overrides, and deployment-YAML precedence; the automated launch suite also verifies namespaced loading. No physical arm or hand was used.
+
+## Hand-eye calibration follow-up
+
+`hand_eye_calibration_file` is a private parameter and launch argument, with the installed package file as its default. The strict loader reads exactly 16 row-major values into a candidate matrix and never indexes beyond its fixed size. It rejects malformed or non-finite values, trailing data, an invalid homogeneous row, non-orthonormal or reflected rotations, and translation outside the SDK float range. Rotation and determinant tolerances are `1e-5`; the homogeneous-row tolerance is `1e-9`. The bundled matrix passes without modification.
+
+Configuration loading validates the calibration before hardware connections and commits it with the other settings. Constructors no longer perform implicit reads. Missing or invalid calibration never falls back to identity, and zero translation does not erase a valid rotation. Failed reloads invalidate getters and prevent further arm commands. The legacy class and general helper use the same strict reader.
+
+Regression coverage includes short, oversized, malformed, non-finite, and trailing-data files; row-major ordering; rigid-transform validity and tolerances; zero-translation rotations; controller/legacy-reader behavior; and launch/YAML path selection. No physical calibration, camera, hand, or arm was used.
+
+Validation passed on Linux ARM64 / ROS Noetic: build/link, all 76 distinct regression cases, installation, installed-library resolution, and devel/install calibration-path overrides through launch arguments and deployment YAML. All 16 matrix-reader tests also passed with AddressSanitizer and UndefinedBehaviorSanitizer, including oversized input, with no sanitizer findings.
+
+The sanitizer check was run inside the Linux test container from the repository root:
+
+```sh
+g++ -std=c++11 -g -O1 -fsanitize=address,undefined -fno-omit-frame-pointer \
+  -Ifixedgrasp/src/HandTCPCommunication/include -I/usr/include/eigen3 \
+  fixedgrasp/src/HandTCPCommunication/test/calibration_matrix_regression.cpp \
+  fixedgrasp/src/HandTCPCommunication/src/CalibrationMatrix.cpp \
+  -lgtest -lpthread -o /tmp/calibration-sanitized
+ASAN_OPTIONS=detect_leaks=1 /tmp/calibration-sanitized
+```

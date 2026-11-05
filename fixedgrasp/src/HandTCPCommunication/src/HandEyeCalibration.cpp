@@ -1,40 +1,50 @@
 
 #include "HandEyeCalibration.h"
+#include <xmlrpcpp/XmlRpcException.h>
 
 namespace calibration
 {
     HandEyeCalibration::HandEyeCalibration()
     {
         CalibrationMoveCtrl = true;
-        ReadCalibrationResultXFile_EyeInHand();
     }
     HandEyeCalibration::~HandEyeCalibration() {}
 
     //////////////////////////手眼标定-读取函数////////////////////////////
 
+    bool HandEyeCalibration::LoadEyeInHand(const std::string &path, std::string &error)
+    {
+        eye_in_hand_loaded = false;
+        ReadCalibrationResultX_EyeInHand.setConstant(std::numeric_limits<double>::quiet_NaN());
+        PoseMatrix candidate;
+        if (!readRigidTransform(path, candidate, error)) return false;
+        ReadCalibrationResultX_EyeInHand = candidate;
+        eye_in_hand_loaded = true;
+        return true;
+    }
     PoseMatrix HandEyeCalibration::ReadCalibrationResultXFile_EyeInHand(void)
     {
-        PoseMatrix result;
-        std::string path_eyeinhand = "/CalibrateMatrix_EyeInHand.txt";
-        ReadCalibrationResultX_EyeInHand << calibration_generalfun.CalibrationEyetohandXRead_path(path_eyeinhand);
-        // std::cout << "Init ReadCalibrationResultX_EyeInHand = " << std::endl;
-        // std::cout << ReadCalibrationResultX_EyeInHand << std::endl;
-        result << ReadCalibrationResultX_EyeInHand;
-        return result;
+        std::string path = ros::package::getPath("HandTCPCommunication") + "/CalibrateMatrix_EyeInHand.txt";
+        XmlRpc::XmlRpcValue value;
+        if (ros::NodeHandle("~").getParam("hand_eye_calibration_file", value))
+        {
+            if (value.getType() != XmlRpc::XmlRpcValue::TypeString)
+            {
+                eye_in_hand_loaded = false;
+                ReadCalibrationResultX_EyeInHand.setConstant(std::numeric_limits<double>::quiet_NaN());
+                throw std::runtime_error("hand_eye_calibration_file must be a string");
+            }
+            path = static_cast<std::string>(value);
+        }
+        std::string error;
+        if (!LoadEyeInHand(path, error)) throw std::runtime_error(error);
+        return GetCalibrationResult_EyeInHand();
     }
     PoseMatrix HandEyeCalibration::GetCalibrationResult_EyeInHand(void)
     {
-        PoseMatrix result;
-        result << 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1;
-        if ((ReadCalibrationResultX_EyeInHand(0, 3) == 0) && (ReadCalibrationResultX_EyeInHand(1, 3) == 0) && (ReadCalibrationResultX_EyeInHand(2, 3) == 0))
-        {
-            std::cout << "Device don't have calibration result, need to calibraition" << std::endl;
-        }
-        else
-        {
-            result << ReadCalibrationResultX_EyeInHand;
-        }
-        return result;
+        if (!eye_in_hand_loaded)
+            throw std::logic_error("No valid eye-in-hand calibration is loaded");
+        return ReadCalibrationResultX_EyeInHand;
     }
 
     //////////////////////////手眼标定-运动函数和处理函数////////////////////////////

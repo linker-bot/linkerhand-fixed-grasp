@@ -57,6 +57,7 @@ The arm and motion configuration parameters are private to the controller node (
 - `arm_port`: integer 1–65535; default 8080.
 - `arm_timeout_ms`: SDK socket timeout, integer 1–60000; default 5000.
 - `arm_speed_percent`: joint and Cartesian movement speed, integer 1–100; default 20.
+- `hand_eye_calibration_file`: absolute hand-eye matrix path; defaults to the package `CalibrateMatrix_EyeInHand.txt`.
 - `target_pose_file` and `tools_tcp_file`: absolute JSON paths. Defaults resolve to the package files in both devel and install spaces.
 - `joint_limits_deg`: optional six `[min, max]` pairs for joints 1–6, in degrees.
 - `workspace_bounds_m`: optional three `[min, max]` pairs for fixed grasp x, y, z, in metres.
@@ -79,6 +80,18 @@ At the initial position, the controller publishes `detect_objects` on `/aimo/rob
 - `bboxes`: four finite coordinates per label, ordered x1, y1, x2, y2, with non-reversed bounds.
 
 One valid snapshot creates a batch. Unknown labels are ignored; duplicate preset IDs are queued once. Empty snapshots finish the batch when fixed targets are configured. Without configured targets, the controller remains waiting. Each queued target receives one grasp-and-place sequence. Motion or tool-frame errors stop further sequence commands until restart. Completion means commands finished, not that a successful physical grasp was measured.
+
+## Hand-eye calibration file
+
+Set `hand_eye_calibration_file:=/absolute/path/calibration.txt` on the launch command, or set the same private parameter in the deployment YAML. The default resolves to `CalibrateMatrix_EyeInHand.txt` in the package in both devel and install spaces. Paths are not prefixed with the package directory when overridden.
+
+The file contains exactly 16 whitespace-separated numeric values in row-major order for a 4×4 homogeneous transform. The existing one-value-per-line layout and a four-row layout are both accepted, including blank lines, CRLF, and scientific notation. Headers, comments, trailing text, extra values, partial numbers, NaN, and infinity are rejected.
+
+The loader checks the homogeneous last row against `[0, 0, 0, 1]` with an absolute tolerance of `1e-9`. It checks each component of `RᵀR − I` and `det(R) − 1` against `1e-5`, accommodating the rounded rotation in the bundled file. Translation must also fit the SDK float range. Reflections, scaling, shear, and singular rotations fail validation. Values are not normalized, rescaled, inverted, or replaced with an identity matrix. A zero translation is valid, including when the rotation is not identity.
+
+The matrix is loaded as part of the complete controller configuration before hardware connections. Failed reads or validation do not commit a partial configuration. A failed reload invalidates the controller's calibration and disables subsequent arm commands; the getter reports an error instead of returning stale data. `HandEyeCalibration` construction no longer reads a file: standalone callers must use `LoadEyeInHand()` or `ReadCalibrationResultXFile_EyeInHand()` before requesting a result. The legacy `CalibrationEyetohandXRead_path()` helper also uses the strict loader and now expects an absolute path.
+
+These checks establish a valid rigid-transform representation, not a correct physical calibration. The caller must supply the appropriate frame direction and consistent translation units. The existing eye-in-hand path multiplies arm pose × calibration × camera/object pose; its metre-based inputs require matching calibration units. Camera calibration quality and the full legacy vision pipeline remain unverified.
 
 ## TCP transport and recovery
 
@@ -106,7 +119,7 @@ catkin_test_results build/test_results
 catkin_make -j2 install
 ```
 
-The regression suite uses the production state machine and ROS subscriber with a fake arm backend; it does not connect to hardware. It covers initial-state transitions, empty and exhausted queues, batch processing, motion and tool failures, invalid detection data, fixed-pose selection, subscriber lifetime, and target configuration. Additional TCP tests cover fragmented and coalesced frames, write backpressure, connect/read/write deadlines, interrupted waits, EOF/reset, retry delay, partial-response rejection, and feedback publication after recovery. Configuration tests cover malformed files and parameters, bounds, atomic loads, failure before hardware connections, and endpoint/speed forwarding to a fake SDK backend.
+The regression suite uses the production state machine and ROS subscriber with a fake arm backend; it does not connect to hardware. It covers initial-state transitions, empty and exhausted queues, batch processing, motion and tool failures, invalid detection data, fixed-pose selection, subscriber lifetime, and target configuration. Additional TCP tests cover fragmented and coalesced frames, write backpressure, connect/read/write deadlines, interrupted waits, EOF/reset, retry delay, partial-response rejection, and feedback publication after recovery. Configuration tests cover malformed files and parameters, bounds, atomic loads, failure before hardware connections, and endpoint/speed forwarding to a fake SDK backend. Calibration tests cover file bounds, malformed values, rigid-transform checks, zero-translation rotations, parameter overrides, and invalidation after a failed reload.
 
 `tools/ros-noetic.Dockerfile` provides an ARM64-compatible build environment using the bundled SDK. See [validation notes](docs/validation.md) for the checks performed and remaining limitations.
 

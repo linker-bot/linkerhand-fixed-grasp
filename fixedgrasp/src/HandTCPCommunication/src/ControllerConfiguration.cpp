@@ -149,6 +149,11 @@ bool loadControllerConfiguration(const ros::NodeHandle &node, const std::string 
         next.arm.speed_percent = intParam(node, "arm_speed_percent", next.arm.speed_percent, 1, 100);
         next.target_pose_file = stringParam(node, "target_pose_file", package_path + "/target_pose.json");
         next.tools_tcp_file = stringParam(node, "tools_tcp_file", package_path + "/tools_Tcp.json");
+        next.hand_eye_calibration_file = stringParam(node, "hand_eye_calibration_file",
+            package_path + "/CalibrateMatrix_EyeInHand.txt");
+        std::string calibration_error;
+        require(calibration::readRigidTransform(next.hand_eye_calibration_file,
+            next.hand_eye_calibration, calibration_error), calibration_error);
         next.joint_limits_deg = limitsParam(node, "joint_limits_deg", 6);
         next.workspace_bounds_m = limitsParam(node, "workspace_bounds_m", 3);
 

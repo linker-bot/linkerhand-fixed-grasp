@@ -8,6 +8,7 @@
     <arg name="arm_speed_percent" default="20"/>
     <arg name="target_pose_file" default="$(find HandTCPCommunication)/target_pose.json"/>
     <arg name="tools_tcp_file" default="$(find HandTCPCommunication)/tools_Tcp.json"/>
+    <arg name="hand_eye_calibration_file" default="$(find HandTCPCommunication)/CalibrateMatrix_EyeInHand.txt"/>
     <arg name="motion_config_file" default=""/>
     <arg name="hand_port" default="20008"/>
     <arg name="hand_connect_timeout_ms" default="250"/>
@@ -35,6 +36,7 @@
         <param name="arm_speed_percent" value="$(arg arm_speed_percent)"/>
         <param name="target_pose_file" value="$(arg target_pose_file)"/>
         <param name="tools_tcp_file" value="$(arg tools_tcp_file)"/>
+        <param name="hand_eye_calibration_file" value="$(arg hand_eye_calibration_file)"/>
         <param name="hand_port" value="$(arg hand_port)"/>
         <param name="hand_connect_timeout_ms" value="$(arg hand_connect_timeout_ms)"/>
         <param name="hand_io_timeout_ms" value="$(arg hand_io_timeout_ms)"/>

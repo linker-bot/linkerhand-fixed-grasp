@@ -37,7 +37,7 @@ set_target_properties(RM_Service PROPERTIES IMPORTED_LOCATION "${RM_SERVICE_LIBR
 
 add_subdirectory(handeyesolver)
 add_library(TCPCommunication_Hand
-  src/TCPCommunication_Hand.cpp src/ControllerConfiguration.cpp src/TcpStream.cpp src/CoordinateTransform.cpp src/HandEyeCalibration.cpp)
+  src/TCPCommunication_Hand.cpp src/CalibrationMatrix.cpp src/ControllerConfiguration.cpp src/TcpStream.cpp src/CoordinateTransform.cpp src/HandEyeCalibration.cpp)
 add_dependencies(TCPCommunication_Hand ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 target_link_libraries(TCPCommunication_Hand PUBLIC handeyesolver Eigen3::Eigen
   ${catkin_LIBRARIES} ${JSONCPP_LIBRARIES} RM_Service)
@@ -67,6 +67,10 @@ if(CATKIN_ENABLE_TESTING)
   add_rostest_gtest(configuration_regression test/configuration_regression.test test/configuration_regression.cpp)
   if(TARGET configuration_regression)
     target_link_libraries(configuration_regression TCPCommunication_Hand)
+  endif()
+  catkin_add_gtest(calibration_matrix_regression test/calibration_matrix_regression.cpp src/CalibrationMatrix.cpp)
+  if(TARGET calibration_matrix_regression)
+    target_link_libraries(calibration_matrix_regression Eigen3::Eigen)
   endif()
   find_package(Threads REQUIRED)
   catkin_add_gtest(tcp_stream_regression test/tcp_stream_regression.cpp src/TcpStream.cpp)

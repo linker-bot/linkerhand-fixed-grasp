@@ -3,6 +3,8 @@
 #define HAND_GENERAL_FUNCTION
 
 #include <eigen3/Eigen/Dense>
+#include "CalibrationMatrix.h"
+#include <stdexcept>
 #include <stdio.h>
 #include <fcntl.h>
 #include <sstream>
@@ -319,19 +321,11 @@ namespace general
         }
         PoseMatrix CalibrationEyetohandXRead_path(std::string path)
         {
-            float eyetohand_x[16];
-            std::string readline_temp;
-
-            std::string resultX_path = ros::package::getPath("HandTCPCommunication");
-            resultX_path = resultX_path + path;
-            std::ifstream calibration_x_read(resultX_path);
-            uint8_t read_x = 0;
-            while (getline(calibration_x_read, readline_temp))
-            {
-                eyetohand_x[read_x] = atof(readline_temp.c_str());
-                read_x++;
-            }
-            return floatToPoseMatrix(eyetohand_x);
+            PoseMatrix matrix;
+            std::string error;
+            if (!calibration::readRigidTransform(path, matrix, error))
+                throw std::runtime_error(error);
+            return matrix;
         }
     };
 } // namespace general

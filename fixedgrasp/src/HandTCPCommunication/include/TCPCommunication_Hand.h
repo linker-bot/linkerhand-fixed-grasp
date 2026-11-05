@@ -218,7 +218,7 @@ namespace AIMOcommunicate
         bool if_complite = false;
         bool if_send = false;
         std_msgs::String msg;
-        PoseMatrix Calibration_Result_EyeInHand;
+        PoseMatrix Calibration_Result_EyeInHand = PoseMatrix::Constant(std::numeric_limits<double>::quiet_NaN());
         AIMOCoordinate::CoordinateTransform coorTrans;
         std::vector<HumanHandParam> hand_poses;
         std_msgs::String Visual_msg;

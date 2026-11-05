@@ -32,6 +32,7 @@ class LaunchParametersTest(unittest.TestCase):
         self.assertEqual(20, params["/arm/arm_speed_percent"])
         self.assertEqual(str(self.package / "target_pose.json"), params["/arm/target_pose_file"])
         self.assertEqual(str(self.package / "tools_Tcp.json"), params["/arm/tools_tcp_file"])
+        self.assertEqual(str(self.package / "CalibrateMatrix_EyeInHand.txt"), params["/arm/hand_eye_calibration_file"])
 
     def test_arguments_override_defaults(self):
         params = self.params("arm_ip:=127.0.0.2", "arm_port:=18080", "arm_timeout_ms:=1234", "arm_speed_percent:=35")
@@ -39,6 +40,15 @@ class LaunchParametersTest(unittest.TestCase):
         self.assertEqual(18080, params["/arm/arm_port"])
         self.assertEqual(1234, params["/arm/arm_timeout_ms"])
         self.assertEqual(35, params["/arm/arm_speed_percent"])
+
+    def test_calibration_path_argument_and_yaml_override(self):
+        params = self.params("hand_eye_calibration_file:=/tmp/custom-calibration.txt")
+        self.assertEqual("/tmp/custom-calibration.txt", params["/arm/hand_eye_calibration_file"])
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml") as config:
+            yaml.safe_dump({"hand_eye_calibration_file": "/tmp/deployment-calibration.txt"}, config)
+            config.flush()
+            params = self.params("motion_config_file:=" + config.name)
+        self.assertEqual("/tmp/deployment-calibration.txt", params["/arm/hand_eye_calibration_file"])
 
     def test_deployment_yaml_takes_precedence(self):
         with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml") as config:
